@@ -1,0 +1,5 @@
+# pico firmware build files
+build
+
+# vscode files
+.vscode
