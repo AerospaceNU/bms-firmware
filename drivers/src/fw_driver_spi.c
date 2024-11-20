@@ -3,6 +3,8 @@
 
 /* Local Includes */
 #include "fw_driver_spi.h"
+#include "fw_constants.h"
+
 #include "pico/stdlib.h"
 #include "hardware/spi.h"
 #include "logic/inc/fw_logic_error.h"
@@ -34,10 +36,11 @@ int fw_spi_controller_init(spi_inst_t *spi_port, uint baudrate,
 }
 
 
-int fw_spi_controller() {
-  char *buffer = calloc(256, sizeof (char));
-    
-  while(fgets(buffer, 256, stdin) != NULL) {
+int fw_spi_write(spi_inst_t *spi_port, uint8_t buffer) {
+  return spi_write_blocking(spi_port, buffer, SPI_MAX_INPUT_SIZE);
+}
 
-  }
+int fw_spi_read(spi_inst_t *spi_port, uint8_t buffer) {
+  uint8_t *tx_buf = calloc(SPI_MAX_INPUT_SIZE, sizeof(uint8_t));
+  return spi_read_blocking(spi_port, tx_buf, buffer, SPI_MAX_INPUT_SIZE);
 }
