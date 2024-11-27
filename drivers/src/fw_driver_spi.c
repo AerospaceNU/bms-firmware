@@ -21,6 +21,7 @@ int fw_spi_controller_init(spi_inst_t *spi_port, uint baudrate,
   uint sdi, uint csb, uint sck, uint sdo) {
   if (spi_init(spi_port, baudrate) != baudrate) {
     // TODO: handler?
+    // logError(errorcode);
     return E_SPI_INIT;
   }
 
