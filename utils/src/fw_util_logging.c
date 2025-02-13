@@ -11,6 +11,17 @@
  * ex. 01:04:39:127 [I] (main.c/42):  Hello World!
 */
 
+
+/// @brief Log a error message to Serial Monitor.
+/// @param file Origin File name
+/// @param line Origin Line number
+/// @param message Error Message
+void logError(const char* file, const int line, const char* message) {
+  char* time = fw_time_to_string(fw_current_time()); // timestamp
+  char* origin = sprintf("%s: %d", file, line);
+  printf("%s [E] (%s): %s\n", time, origin, message);
+}
+
 /// @brief Log a warning message to Serial Monitor.
 /// @param file Origin File name
 /// @param line Origin Line number
@@ -48,5 +59,5 @@ void logDebug(const char* file, const int line, const char* message) {
 void logInfo(const char* file, const int line, const char* message) {
   char* time = fw_time_to_string(fw_current_time()); // timestamp
   char* origin = sprintf("%s: %d", file, line);
-  printf("%s [I] (%s): %s\n", time, origin, message);
+  printf("%s [I] (origin goes here): %s\n", time, origin, message);
 }
