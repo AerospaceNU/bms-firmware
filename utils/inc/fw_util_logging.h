@@ -6,18 +6,6 @@
 //*************************************************************************************************
 
 
-
-// Log Level (optional)
-
-// log warning
-// log message
-// log debug
-// log info
-
-
-
-
-
 void logWarning(const char* file, const int line, const char *message);
 
 void logMessage(const char* file, const int line, const char *message);
