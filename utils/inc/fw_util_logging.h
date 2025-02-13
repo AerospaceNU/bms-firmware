@@ -15,11 +15,7 @@
 // log info
 
 
-// What should a log message look like?
-/* 
- * [Time since boot] [Origin File/Line] [Log Type] [Message]
- * ex. 01:04:39:127 (main.c/42) [I]:  Hello World!
-*/
+
 
 
 void logWarning(const char *message);
