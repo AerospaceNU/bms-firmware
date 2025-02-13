@@ -7,32 +7,42 @@
 
 // What should a log message look like?
 /* 
- * [Time since boot] [Origin File/Line] [Log Type] [Message]
- * ex. 01:04:39:127 (main.c/42) [I]:  Hello World!
+ * [Time since boot] [Log Type] [Origin File/Line]: [Message]
+ * ex. 01:04:39:127 [I] (main.c/42):  Hello World!
 */
 
 
 
 /// @brief Log a warning message to Serial Monitor.
+/// @param file Origin File name
+/// @param line Origin Line number
 /// @param message Warning Message
-void logWarning(const char *message) {
-  printf("%s [W] (origin goes here): %s\n",fw_time_to_string(fw_current_time()), message);
+void logWarning(const char* file, const int line, const char *message) {
+  char* time = fw_time_to_string(fw_current_time()); // timestamp
+  char* origin = "placeholder";
+  printf("%s [W] ( %s ): %s\n", time, origin, message);
 }
 
 /// @brief Log a message to the Serial Monitor
 /// @param message Message
-void logMessage(const char *message) {
-  printf("%s [M] (origin goes here): %s\n",fw_time_to_string(fw_current_time()), message);
+void logMessage(const char* file, const int line, const char *message) {
+  char* time = fw_time_to_string(fw_current_time()); // timestamp
+  char* origin = "placeholder";
+  printf("%s [M] (origin goes here): %s\n", time, origin, message);
 }
 
 /// @brief Log a debug message to the Serial Monitor
 /// @param message Debug Message
-void logDebug(const char *message) {
-  printf("%s [D] (origin goes here: %s\n",fw_time_to_string(fw_current_time()), message);
+void logDebug(const char* file, const int line, const char* message) {
+  char* time = fw_time_to_string(fw_current_time()); // timestamp
+  char* origin = "placeholder";
+  printf("%s [D] (origin goes here): %s\n", time, origin, message);
 }
 
 /// @brief Log an info message to the Serial Monitor
 /// @param message Info Message
-void logInfo(const char *message) {
-  printf("%s [I] (origin goes here: %s\n",fw_time_to_string(fw_current_time()), message);
+void logInfo(const char* file, const int line, const char *message) {
+  char* time = fw_time_to_string(fw_current_time()); // timestamp
+  char* origin = "placeholder";
+  printf("%s [I] (origin goes here): %s\n", time, origin, message);
 }

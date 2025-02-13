@@ -18,13 +18,13 @@
 
 
 
-void logWarning(const char *message);
+void logWarning(const char* file, const int line, const char *message);
 
-void logMessage(const char *message);
+void logMessage(const char* file, const int line, const char *message);
 
-void logDebug(const char *message);
+void logDebug(const char* file, const int line, const char *message);
 
-void logInfo(const char *message);
+void logInfo(const char* file, const int line, const char *message);
 
 
 //*************************************************************************************************
