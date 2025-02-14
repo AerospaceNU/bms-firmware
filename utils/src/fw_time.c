@@ -42,6 +42,6 @@ fw_time_t fw_current_time() {
 /// @return String timestamp
 char* fw_time_to_string(fw_time_t time) {
   char *fw_time_str = (char *)malloc(sizeof(char *) * TIMESTAMP_SIZE);
-  sprintf(fw_time_str, "%ld:%ld:%ld:%ld", time.hour, time.minute, time.second, time.minute);
+  sprintf(fw_time_str, "%02ld:%02ld:%02ld:%03ld", time.hour, time.minute, time.second, time.millisecond);
   return fw_time_str;
 }
