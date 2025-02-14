@@ -2,10 +2,13 @@
 #define FW_TYPES_H
 
 #include <stdint.h>
+#include <string.h>
 
 // *************************************************************************************************
 // System Types Module
 // *************************************************************************************************
+
+#define FILENAME (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
 
 typedef struct fw_time {
     /* data */
