@@ -1,5 +1,6 @@
 /* Global Includes */
 #include <stdio.h>
+#include <stdlib.h>
 
 /* Local Includes */
 #include "fw_driver_spi.h"

@@ -1,3 +1,8 @@
+/* Global Includes */
+#include <stdlib.h>
+#include <stdio.h>
+
+/* Local Includes */
 #include "fw_time.h"
 #include "fw_globals.h"
 #include "fw_constants.h"
@@ -35,7 +40,7 @@ fw_time_t fw_current_time() {
 
 /// @brief Convert a fw_time_t to a String
 /// @return String timestamp
-static char* fw_time_to_string(fw_time_t time) {
+char* fw_time_to_string(fw_time_t time) {
   char *fw_time_str = (char *)malloc(sizeof(char *) * TIMESTAMP_SIZE);
   sprintf(fw_time_str, "%ld:%ld:%ld:%ld", time.hour, time.minute, time.second, time.minute);
   return fw_time_str;

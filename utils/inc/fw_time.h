@@ -8,10 +8,8 @@
 #include "fw_types.h"
 
 void fw_time_init();
-
 fw_time_t fw_current_time();
-
-static char* fw_time_to_string(fw_time_t time);
+char* fw_time_to_string(fw_time_t time);
 
 //*************************************************************************************************
 
