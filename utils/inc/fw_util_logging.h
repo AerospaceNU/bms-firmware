@@ -1,23 +1,16 @@
 #ifndef FW_UTIL_LOGGING_H
 #define FW_UTIL_LOGGING_H
 
+#include "fw_types.h"
 //*************************************************************************************************
 // Logging Module
 //*************************************************************************************************
 
-#define LOG_ERROR(a)            logError(FILENAME, __LINE__, a)
-#define LOG_WARNING(a)          logWarning(FILENAME, __LINE__, a)
-#define LOG_MESSAGE(a)          logMessage(FILENAME, __LINE__, a)
-#define LOG_DEBUG(a)            logDebug(FILENAME, __LINE__, a)
-#define LOG_INFO(a)             logError(FILENAME, __LINE__, a)
-
-
-
-void logError(const char* file, const int line, const char* message);
-void logWarning(const char* file, const int line, const char *message);
-void logMessage(const char* file, const int line, const char *message);
-void logDebug(const char* file, const int line, const char *message);
-void logInfo(const char* file, const int line, const char *message);
+#define LOG_ERROR(a)            log(FILENAME, __LINE__, FW_LOG_ERROR, a)
+#define LOG_WARNING(a)          log(FILENAME, __LINE__, FW_LOG_WARNING, a)
+#define LOG_MESSAGE(a)          log(FILENAME, __LINE__, FW_LOG_MESSAGE, a)
+#define LOG_DEBUG(a)            log(FILENAME, __LINE__, FW_LOG_DEBUG, a)
+#define LOG_INFO(a)             log(FILENAME, __LINE__, FW_LOG_ERROR, a)
 
 
 //*************************************************************************************************

@@ -18,6 +18,13 @@ typedef struct fw_time {
     uint16_t millisecond;
 } fw_time_t;
 
+enum fw_log_type {
+    FW_LOG_ERROR,
+    FW_LOG_WARNING,
+    FW_LOG_MESSAGE,
+    FW_LOG_DEBUG,
+    FW_LOG_INFO
+};
 
 
 // *************************************************************************************************
