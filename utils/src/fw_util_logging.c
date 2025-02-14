@@ -18,8 +18,7 @@
 /// @param message Error Message
 void logError(const char* file, const int line, const char* message) {
   char* time = fw_time_to_string(fw_current_time()); // timestamp
-  char* origin = sprintf("%s: %d", file, line);
-  printf("%s [E] (%s): %s\n", time, origin, message);
+  printf("%s [E] (%s/%d): %s\n", time, file, line, message);
 }
 
 /// @brief Log a warning message to Serial Monitor.
@@ -28,8 +27,7 @@ void logError(const char* file, const int line, const char* message) {
 /// @param message Warning Message
 void logWarning(const char* file, const int line, const char* message) {
   char* time = fw_time_to_string(fw_current_time()); // timestamp
-  char* origin = sprintf("%s: %d", file, line);
-  printf("%s [W] (%s): %s\n", time, origin, message);
+  printf("%s [W] (%s/%d): %s\n", time, file, line, message);
 }
 
 /// @brief Log a message to the Serial Monitor
@@ -38,8 +36,7 @@ void logWarning(const char* file, const int line, const char* message) {
 /// @param message Message
 void logMessage(const char* file, const int line, const char* message) {
   char* time = fw_time_to_string(fw_current_time()); // timestamp
-  char* origin = sprintf("%s: %d", file, line);
-  printf("%s [M] (%s): %s\n", time, origin, message);
+  printf("%s [M] (%s/%d): %s\n", time, file, line, message);
 }
 
 /// @brief Log a debug message to the Serial Monitor
@@ -48,8 +45,7 @@ void logMessage(const char* file, const int line, const char* message) {
 /// @param message Debug Message
 void logDebug(const char* file, const int line, const char* message) {
   char* time = fw_time_to_string(fw_current_time()); // timestamp
-  char* origin = sprintf("%s: %d", file, line);
-  printf("%s [D] (%s): %s\n", time, origin, message);
+  printf("%s [D] (%s/%d): %s\n", time, file, line, message);
 }
 
 /// @brief Log an info message to the Serial Monitor
@@ -58,6 +54,5 @@ void logDebug(const char* file, const int line, const char* message) {
 /// @param message Info Message
 void logInfo(const char* file, const int line, const char* message) {
   char* time = fw_time_to_string(fw_current_time()); // timestamp
-  char* origin = sprintf("%s: %d", file, line);
-  printf("%s [I] (origin goes here): %s\n", time, origin, message);
+  printf("%s [I] (%s/%d): %s\n", time, file, line, message);
 }
