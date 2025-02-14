@@ -1,8 +1,10 @@
+/* Global Includes */
+#include <stdio.h>
+
 /* Local Includes */
 #include "fw_util_logging.h"
 #include "pico/stdlib.h"
 #include "fw_time.h"
-
 
 
 // What should a log message look like?
@@ -19,6 +21,7 @@
 void logError(const char* file, const int line, const char* message) {
   char* time = fw_time_to_string(fw_current_time()); // timestamp
   printf("%s [E] (%s/%d): %s\n", time, file, line, message);
+  free(time);
 }
 
 /// @brief Log a warning message to Serial Monitor.
@@ -28,6 +31,7 @@ void logError(const char* file, const int line, const char* message) {
 void logWarning(const char* file, const int line, const char* message) {
   char* time = fw_time_to_string(fw_current_time()); // timestamp
   printf("%s [W] (%s/%d): %s\n", time, file, line, message);
+  free(time);
 }
 
 /// @brief Log a message to the Serial Monitor
@@ -37,6 +41,7 @@ void logWarning(const char* file, const int line, const char* message) {
 void logMessage(const char* file, const int line, const char* message) {
   char* time = fw_time_to_string(fw_current_time()); // timestamp
   printf("%s [M] (%s/%d): %s\n", time, file, line, message);
+  free(time);
 }
 
 /// @brief Log a debug message to the Serial Monitor
@@ -46,6 +51,7 @@ void logMessage(const char* file, const int line, const char* message) {
 void logDebug(const char* file, const int line, const char* message) {
   char* time = fw_time_to_string(fw_current_time()); // timestamp
   printf("%s [D] (%s/%d): %s\n", time, file, line, message);
+  free(time);
 }
 
 /// @brief Log an info message to the Serial Monitor
@@ -55,4 +61,5 @@ void logDebug(const char* file, const int line, const char* message) {
 void logInfo(const char* file, const int line, const char* message) {
   char* time = fw_time_to_string(fw_current_time()); // timestamp
   printf("%s [I] (%s/%d): %s\n", time, file, line, message);
+  free(time);
 }
