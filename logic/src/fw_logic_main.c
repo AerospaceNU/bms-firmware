@@ -2,6 +2,12 @@
 #include "pico/stdlib.h"
 #include "fw_util_logging.h"
 
+int fw_logic_init() {
+  if (stdio_init_all() == false) {
+    logError(__FILE__, __LINE__, "Could not initialize stdio");
+  }
+}
+
 int main() {
   int err = 0;
 
@@ -15,10 +21,4 @@ int main() {
   }
 
   return err;
-}
-
-int fw_logic_init() {
-  if (stdio_init_all() == false) {
-    logError(__FILE__, __LINE__, "Could not initialize stdio");
-  }
 }
