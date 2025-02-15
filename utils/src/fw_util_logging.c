@@ -74,7 +74,7 @@ void logInfo(const char* file, const int line, const char* message) {
 /// @param line Origin Line number
 /// @param type Log Type
 /// @param message Message
-void log(const char* file, const int line, const enum fw_log_type type, const char* message) {
+void fw_log(const char* file, const int line, const enum fw_log_type type, const char* message) {
   char* time = fw_time_to_string(fw_current_time()); // timestamp
   char type_ch;
   switch (type) {
