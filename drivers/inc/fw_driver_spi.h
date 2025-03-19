@@ -27,5 +27,10 @@
 
 int fw_spi_controller_init(spi_inst_t *spi_port, uint baudrate,
   uint sdi, uint csb, uint sck, uint sdo);
+void fw_spi_controller_deinit(spi_inst_t *spi_port);
+int fw_spi_controller_wr_bl(spi_inst_t *spi_port, const uint8_t *tx_buffer, uint8_t *rx_buffer, size_t len);
+int fw_spi_controller_r_bl(spi_inst_t *spi_port, const uint8_t *rep_tx_buffer, uint8_t *rx_buffer, size_t len);
+int fw_spi_controller_w_bl(spi_inst_t *spi_port, const uint8_t *tx_buffer, size_t len);
+
 
 #endif // FW_DRIVER_SPI_H
