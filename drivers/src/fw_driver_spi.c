@@ -59,24 +59,33 @@ void fw_spi_controller_deinit(spi_inst_t *spi_port) {
 /// @return error code (or 1 if successful)
 int fw_spi_controller_wr_bl(spi_inst_t *spi_port, const uint8_t *tx_buffer, uint8_t *rx_buffer, size_t len) {
   // TODO: Implement SPI write read blocking
-  
+  LOG_INFO("Writing and reading data from SPI device");
+  if (spi_write_read_blocking(spi_port, tx_buffer, rx_buffer, len) != len) {
+    LOG_ERROR("SPI write read failed");
+    return E_SPI_WR;
+  }
+  LOG_INFO("Data written and read successfully");
+  return 1;
 }
 
 int fw_spi_controller_r_bl(spi_inst_t *spi_port, const uint8_t *rep_tx_buffer, uint8_t *rx_buffer, size_t len) {
   // TODO: Implement SPI read blocking
+  LOG_INFO("Reading data from SPI device");
+  if (spi_read_blocking(spi_port, rep_tx_buffer, rx_buffer, len) != len) {
+    LOG_ERROR("SPI read failed");
+    return E_SPI_READ;
+  }
+  LOG_INFO("Data read successfully");
+  return 1;
 }
 
 int fw_spi_controller_w_bl(spi_inst_t *spi_port, const uint8_t *tx_buffer, size_t len) {
   // TODO: Implement SPI write blocking
+  LOG_INFO("Writing data to SPI device");
+  if (spi_write_blocking(spi_port, tx_buffer, len) != len) {
+    LOG_ERROR("SPI write failed");
+    return E_SPI_WRITE;
+  }
+  LOG_INFO("Data written successfully");
+  return 1;
 }
-
-
-/*int fw_spi_write(spi_inst_t *spi_port, uint8_t buffer) {
-  return spi_write_blocking(spi_port, buffer, SPI_MAX_INPUT_SIZE);
-}
-
-int fw_spi_read(spi_inst_t *spi_port, uint8_t *buffer) {
-  uint8_t *tx_buf = calloc(SPI_MAX_INPUT_SIZE, sizeof(uint8_t));
-  return spi_read_blocking(spi_port, tx_buf, buffer, SPI_MAX_INPUT_SIZE);
-}
-  */

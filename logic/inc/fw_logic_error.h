@@ -16,6 +16,7 @@
 #define E_SPI_INIT      E_SPI(1)
 #define E_SPI_WRITE     E_SPI(2)
 #define E_SPI_READ      E_SPI(3)
+#define E_SPI_WR        E_SPI(4)
 
 /*************************************************************************************************/
 /* Raspberry Pico System Errors */
