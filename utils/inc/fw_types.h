@@ -26,6 +26,14 @@ enum fw_log_type {
     FW_LOG_INFO
 };
 
+enum fw_core_state {
+    FW_CS_SLEEP,
+    FW_CS_STANDBY,
+    FW_CS_REFUP,
+    FW_CS_MEASURE,
+    FW_CS_EXTENDED_BALANCING
+};
+
 
 // *************************************************************************************************
 
