@@ -1,6 +1,28 @@
 #ifndef FW_CONSTANTS_H
 #define FW_CONSTANTS_H
 
-#define SPI_MAX_INPUT_SIZE 256 // TODO: figure out max SPI input
+//*************************************************************************************************
+// SPI Defines
+//*************************************************************************************************
+
+// SPI Pinouts
+#define PIN_SDI 0
+#define PIN_CSB 1
+#define PIN_SCK 2
+#define PIN_SDO 3
+
+#define SPI_MAX_INPUT_SIZE 256 // TODO: figure out max SPI input'
+
+
+
+
+//*************************************************************************************************
+// Time Defines
+//*************************************************************************************************
+
+// Time Constants
+#define TIMESTAMP_SIZE 16
+
+//*************************************************************************************************
 
 #endif // FW_CONSTANTS_H
