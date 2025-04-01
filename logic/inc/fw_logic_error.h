@@ -9,7 +9,13 @@
 #define E_SPI(x)        (100+x)
 
 #define E_FW(x)         (1000 + x)
-#define E_PICO(x)       E_FW(100 + x)
+#define E_FW_LOGIC(x)   E_FW(100 + x)
+#define E_PICO(x)       E_FW(200 + x)
+
+/*************************************************************************************************/
+/* Fixed Wing Logical Errors */
+#define E_FW_LOGIC_INIT        E_FW_LOGIC(1)
+#define E_FW_LOGIC_DEINIT      E_FW_LOGIC(2)
 
 /*************************************************************************************************/
 /* SPI Errors */
