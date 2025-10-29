@@ -31,5 +31,9 @@
 
 /*************************************************************************************************/
 /* BQ76972 Errors */
+#define E_BQ76972_INIT              E_BQ76972(1)
+#define E_BQ76972_READ              E_BQ76972(2)
+#define E_BQ76972_WRITE             E_BQ76972(3)
+#define E_BQ76972_OP_STATUS         E_BQ76972(4)
 
 #endif // _FW_LOGIC_ERROR_
