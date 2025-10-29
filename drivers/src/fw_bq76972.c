@@ -151,10 +151,10 @@ int fw_bq76972_read_data_subcommand(uint16_t mem_addr, uint16_t *data) {
         LOG_ERROR("Failed to read integrity data from BQ76972");
         return err;
     }
-    
-    uint8_t transfer_buffer[integrity[LENGTH]];
+    size_t data_len = integrity[LENGTH]-2-2; // -2 for address bytes, -2 for integrity bytes
+    uint8_t transfer_buffer[data_len];
     // Read data from transfer buffer
-    err = fw_bq76971_read_register(TRANSFER_BUFFER, transfer_buffer, integrity[LENGTH]);
+    err = fw_bq76971_read_register(TRANSFER_BUFFER, transfer_buffer, data_len);
     if (err != 1) {
         LOG_ERROR("Failed to read data from BQ76972 transfer buffer");
         return err;
