@@ -11,8 +11,7 @@
 #define PIN_SCK 2
 #define PIN_SDO 3
 
-#define SPI_MAX_INPUT_SIZE 256 // TODO: figure out max SPI input'
-
+#define SPI_PORT spi0
 
 
 

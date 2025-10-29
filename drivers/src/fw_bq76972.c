@@ -8,21 +8,17 @@
 #include "fw_driver_spi.h"
 #include "fw_util_logging.h"
 #include "fw_logic_error.h"
+#include "fw_constants.h"
 
 
 /**
  * @brief Initialize BQ76972 SPI Interface
  * @param spi_port spi0 or spi1 - the Pico port to use for SPI (check header for more info)
- * @param sdi "serial data in" GPIO pin number
- * @param csb "chip select (active low)" GPIO pin number
- * @param sck "serial clock" GPIO pin number
- * @param sdo "serial data out" GPIO pin number
  * @return error code (or 1 if successful)
  */
-int fw_bq76972_spi_init(spi_inst_t *spi_port, uint sdi, uint csb, uint sck, uint sdo) {
+int fw_bq76972_spi_init() {
     LOG_INFO("Initializing BQ76972 SPI Interface...");
-    spi_set_format(spi_port, BITS_PER_WORD, PHASE, POLARITY, ORDER);
-    uint err = fw_spi_controller_init(spi_port, BAUD_RATE, sdi, csb, sck, sdo);
+    uint err = fw_spi_controller_init(SPI_PORT, BAUD_RATE, POLARITY, PHASE, ORDER, BITS_PER_WORD, PIN_SDI, PIN_CSB, PIN_SCK, PIN_SDO);
     if (err != 1) {
         LOG_ERROR("Failed to initialize BQ76972 SPI Interface");
         return err;
@@ -40,9 +36,9 @@ int fw_bq76972_spi_init(spi_inst_t *spi_port, uint sdi, uint csb, uint sck, uint
  * @param sdo "serial data out" GPIO pin number
  * @return error code (or 1 if successful)
  */
-void fw_bq76972_spi_deinit(spi_inst_t *spi_port, uint sdi, uint csb, uint sck, uint sdo) {
+void fw_bq76972_spi_deinit() {
     LOG_INFO("Deinitializing BQ76972 SPI Interface...");
-    fw_spi_controller_deinit(SPI_PORT, sdi, csb, sck, sdo);
+    fw_spi_controller_deinit(SPI_PORT, PIN_SDI, PIN_CSB, PIN_SCK, PIN_SDO);
     LOG_INFO("BQ76972 SPI Interface deinitialized successfully");
 }
 
@@ -187,7 +183,7 @@ int fw_bq76971_read_register(uint8_t reg_addr, uint8_t *data, size_t len) {
     tx_buffer[0] = (uint8_t) (reg_addr & READ_BIT); // Set the first byte to the register address
     uint8_t rx_buffer[len + 1];
 
-    if (fw_spi_controller_wr_bl(SPI_PORT, tx_buffer, rx_buffer, len + 1) != 1) {
+    if (fw_spi_controller_wr_bl(SPI_PORT, tx_buffer, rx_buffer, len + 1, PIN_CSB) != 1) {
         LOG_ERROR("Failed to read register from BQ76972");
         return E_BQ76972_READ;
     }
@@ -208,7 +204,7 @@ int fw_bq76971_write_register(uint8_t reg_addr, uint8_t *data, size_t len) {
     tx_buffer[0] = (uint8_t)(reg_addr | WRITE_BIT); // Set the first byte to the register address
     memcpy(&tx_buffer[1], data, len); // Copy data to be written after the register address
 
-    if (fw_spi_controller_w_bl(SPI_PORT, tx_buffer, len + 1) != 1) {
+    if (fw_spi_controller_w_bl(SPI_PORT, tx_buffer, len + 1, PIN_CSB) != 1) {
         LOG_ERROR("Failed to write register to BQ76972");
         return E_BQ76972_WRITE;
     }

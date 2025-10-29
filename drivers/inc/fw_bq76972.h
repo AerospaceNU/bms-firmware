@@ -29,8 +29,8 @@
 #define ORDER               SPI_MSB_FIRST       // SPI Data Order
 
 
-int fw_bq76972_spi_init(spi_inst_t *spi_port, uint sdi, uint csb, uint sck, uint sdo);
-void fw_bq76972_spi_deinit(spi_inst_t *spi_port, uint sdi, uint csb, uint sck, uint sdo);
+int fw_bq76972_spi_init();
+void fw_bq76972_spi_deinit();
 int fw_bq76972_write_data_subcommand(uint16_t mem_addr, uint16_t data);
 int fw_bq76972_read_data_subcommand(uint16_t mem_addr, uint16_t *data);
 int fw_bq76971_read_register(uint8_t reg_addr, uint8_t *data, size_t len);
