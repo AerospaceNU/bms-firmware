@@ -46,9 +46,10 @@ void fw_bq76972_spi_deinit() {
  * @brief Write Data to BQ76972 Data Memory Address
  * @param mem_addr Memory address to write data
  * @param data Data to write to memory address
+ * @param len Length of data in bytes
  * @return error code (or 1 if successful)
  */
-int fw_bq76972_write_data_mem(uint16_t mem_addr, uint16_t data) {
+int fw_bq76972_write_data_mem(uint16_t mem_addr, uint8_t *data, size_t len) {
     /* Steps
      * Write LOWER_BYTE register with lower byte of addr
      * Write UPPER_BYTE register with upper byte of addr
@@ -68,18 +69,19 @@ int fw_bq76972_write_data_mem(uint16_t mem_addr, uint16_t data) {
     }
 
     // Prepare data to write in little endian format
-    uint8_t data_buffer[] = {(uint8_t)(data & 0xFF), (uint8_t)((data >> 8) & 0xFF)};
+    uint8_t data_buffer[] = &data;
 
     // Write data to transfer buffer
-    err = fw_bq76971_write_register(TRANSFER_BUFFER, data_buffer, 2);
+    err = fw_bq76971_write_register(TRANSFER_BUFFER, data_buffer, len);
     if (err != 1) {
         LOG_ERROR("Failed to write data to BQ76972 transfer buffer");
         return err;
     }
     // Calculate checksum
-    uint8_t checksum = _calculate_checksum(mem_addr, 2);
+    size_t integrity_len = len + 2 + 2; // +2 for address bytes, +2 for integrity bytes
+    uint8_t checksum = _calculate_checksum(mem_addr, integrity_len);
     // Write checksum and length to INTEGRITY_ADDRESS
-    uint8_t integrity[2] = { checksum, 2 };
+    uint8_t integrity[2] = { checksum, integrity_len};
     err = fw_bq76971_write_register(INTEGRITY_ADDRESS, integrity, 2);
     if (err != 1) {
         LOG_ERROR("Failed to write integrity data to BQ76972");
