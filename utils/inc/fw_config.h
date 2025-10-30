@@ -1,27 +1,24 @@
-#ifndef FW_CONSTANTS_H
-#define FW_CONSTANTS_H
+#ifndef FW_CONFIG_H
+#define FW_CONFIG_H
 
 //*************************************************************************************************
-// SPI Defines
+// Configuration Defines
 //*************************************************************************************************
-
-// SPI Pinouts
-#define PIN_SDI 0
-#define PIN_CSB 1
-#define PIN_SCK 2
-#define PIN_SDO 3
-
-#define SPI_PORT spi0
-
 
 
 //*************************************************************************************************
-// Time Defines
+// Thermistor Configuration
 //*************************************************************************************************
 
-// Time Constants
-#define TIMESTAMP_SIZE 16
+// Thermistor Pins
+#define FW_THERM_1 
+#define FW_THERM_2
+#define FW_THERM_3
+#define FW_THERM_4
+#define FW_THERM_5
+#define FW_THERM_6
+
 
 //*************************************************************************************************
 
-#endif // FW_CONSTANTS_H
+#endif // FW_CONFIG_H
