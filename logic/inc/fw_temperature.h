@@ -1,23 +1,26 @@
 //*************************************************************************************************
-//  Module                  :   fw_logic_error.h
+//  Module                  :   fw_logic_temperature.h
 //  Revision                :   0.1
-//  Description             :   Custom error declarations and handler functions
+//  Description             :   Read and configure temperature sensors
 //*************************************************************************************************
 #ifndef _FW_TEMPERATURE_H_
 #define _FW_TEMPERATURE_H_
 
-/*************************************************************************************************/
-/* Thermistor Command Addresses */
-#define INTERNAL_ADDR      0x68 // Internal Die Temperature
-#define CFETOFF_ADDR       0x6A // CFETOFF Pin Thermistor Address
-#define DFETOFF_ADDR       0x6C // DFETOFF Pin Thermistor Address
-#define ALERT_ADDR         0x6E // ALERT Pin Thermistor Address
-#define TS1_ADDR           0x70 // TS1 Pin Thermistor Address
-#define TS2_ADDR           0x72 // TS2 Pin Thermistor Address
-#define TS3_ADDR           0x74 // TS3 Pin Thermistor Address
-#define HDQ_ADDR           0x76 // HDQ Pin Thermistor Address
-#define DCHG_ADDR          0x78 // DCHG Pin Thermistor Address
-#define DDSG_ADDR          0x7A // DDSG Pin Thermistor Address
 
+#include "fw_config.h"
+
+/*************************************************************************************************/
+
+// Thermistor Initial Configurations
+#define FW_THERM_PULLUP                     FW_18K_PULLUP       // Set default pullup resistor
+#define FW_THERM_MODEL                      FW_18K_MODEL        // Set default thermistor model
+#define FW_THERM_MEAS_TYPE                  FW_CELL_TEMP_PROT   // Set default measurement type
+
+/*************************************************************************************************/
+
+int fw_therm_init();
+int fw_therm_deinit();
+int fw_therm_read_all(float *temperatures);
+int fw_therm_read(uint8_t therm_addr, float *temperature);
 
 #endif // _FW_TEMPERATURE_H_
