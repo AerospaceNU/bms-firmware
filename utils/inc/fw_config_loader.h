@@ -7,8 +7,8 @@
 
 #include "fw_config.h"
 
-void fw_config_all(uint8_t pullup, uint8_t model, uint8_t meas_type);
-void fw_config_thermistors(uint therm, uint8_t pullup, uint8_t model, uint8_t meas_type);
+int fw_therm_config_all(uint8_t pullup, uint8_t model, uint8_t meas_type);
+int fw_therm_config(uint therm, uint8_t pullup, uint8_t model, uint8_t meas_type);
 
 
 //*************************************************************************************************
