@@ -26,6 +26,25 @@ enum fw_log_type {
     FW_LOG_INFO
 };
 
+enum fw_pullup_type {
+    FW_PULLUP_18K,
+    FW_PULLUP_180K,
+    FW_PULLUP_NONE
+};
+
+enum fw_thermistor_model {
+    FW_MODEL_18K,
+    FW_MODEL_180K,
+    FW_MODEL_CUSTOM,
+    FW_MODEL_NONE
+};
+
+enum fw_measurement_type {
+    FW_MEAS_TYPE_GEN_ADCIN,
+    FW_MEAS_TYPE_CELL_TEMP_PROT,
+    FW_MEAS_TYPE_CELL_TEMP,
+    FW_MEAS_TYPE_FET_TEMP_PROT
+};
 
 // *************************************************************************************************
 
