@@ -36,7 +36,7 @@ int fw_therm_config_all(uint8_t pullup, uint8_t model, uint8_t meas_type) {
  * @param model Thermistor model setting (FW_MODEL_18K, FW_MODEL_180K, FW_MODEL_CUSTOM, FW_MODEL_NONE)
  * @param meas_type Measurement type setting (FW_MEAS_TYPE_GEN_ADCIN, FW_MEAS_TYPE_CELL_TEMP_PROT, FW_MEAS_TYPE_CELL_TEMP, FW_MEAS_TYPE
  */
-int fw_therm_config(uint therm, uint8_t pullup, uint8_t model, uint8_t meas_type) {
+int fw_therm_config(uint8_t therm, uint8_t pullup, uint8_t model, uint8_t meas_type) {
     uint8_t config_value = 0 | FW_FXN_THERM | pullup | model | meas_type;
     int err = fw_bq76971_write_register(therm, &config_value, 1);
     if (err != 1) {
@@ -44,8 +44,9 @@ int fw_therm_config(uint therm, uint8_t pullup, uint8_t model, uint8_t meas_type
         return err;
     }
     LOG_INFO("Thermistor at address 0x%02X configured successfully", therm);
+    
     return 1;
-
+}
 
 //*************************************************************************************************
 // _________________ Configuration Module

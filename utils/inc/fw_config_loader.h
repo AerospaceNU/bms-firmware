@@ -6,9 +6,10 @@
 //*************************************************************************************************
 
 #include "fw_config.h"
+#include <stdint.h>
 
 int fw_therm_config_all(uint8_t pullup, uint8_t model, uint8_t meas_type);
-int fw_therm_config(uint therm, uint8_t pullup, uint8_t model, uint8_t meas_type);
+int fw_therm_config(uint8_t therm, uint8_t pullup, uint8_t model, uint8_t meas_type);
 
 
 //*************************************************************************************************

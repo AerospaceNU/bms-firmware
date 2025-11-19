@@ -10,6 +10,7 @@
 #include "fw_logic_error.h"
 #include "fw_constants.h"
 
+static uint8_t _calculate_checksum(uint16_t mem_addr, size_t len);
 
 /**
  * @brief Initialize BQ76972 SPI Interface
@@ -69,7 +70,7 @@ int fw_bq76972_write_data_mem(uint16_t mem_addr, uint8_t *data, size_t len) {
     }
 
     // Prepare data to write in little endian format
-    uint8_t data_buffer[] = &data;
+    uint8_t *data_buffer = data;
 
     // Write data to transfer buffer
     err = fw_bq76971_write_register(TRANSFER_BUFFER, data_buffer, len);
@@ -146,7 +147,7 @@ int fw_bq76972_read_data_subcommand(uint16_t mem_addr, uint16_t *data) {
 
     uint8_t integrity[2];
     // Read checksum and data length from 0x60
-    int err = fw_bq76971_read_register(INTEGRITY_ADDRESS, integrity, 2);
+    err = fw_bq76971_read_register(INTEGRITY_ADDRESS, integrity, 2);
     if (err != 1) {
         LOG_ERROR("Failed to read integrity data from BQ76972");
         return err;
@@ -220,7 +221,7 @@ int fw_bq76971_write_register(uint8_t reg_addr, uint8_t *data, size_t len) {
  * @param len Length of data being transferred
  * @return Calculated checksum byte
  */
-static uint8_t _calculate_checksum(uint16_t mem_addr, size_t len) {
+uint8_t _calculate_checksum(uint16_t mem_addr, size_t len) {
     uint8_t checksum = 0;
     // Add lower and upper bytes of memory address
     checksum += (uint8_t)(mem_addr & 0xFF);

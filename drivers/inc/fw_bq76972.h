@@ -5,6 +5,7 @@
 /* BQ76972 Driver */
 /*************************************************************************************************/
 
+#include <stdint.h>
 
 // BQ76972 Register Addresses
 #define REG_ADDRESS         0x3E                // Register address for subcommands (16-bit address)

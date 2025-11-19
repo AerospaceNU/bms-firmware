@@ -16,13 +16,13 @@ int fw_logic_init() {
     LOG_ERROR("Could not initialize stdio");
     return E_FW_LOGIC_INIT;
   }
-  fw_time_init(g_current_time);
+  fw_time_init(&g_current_time);
   LOG_DEBUG("g_current_time initialized");
 }
 
 int fw_logic_deinit() {
-  if (g_current_time != NULL) {
-    fw_time_deinit(g_current_time);
+  if (&g_current_time != NULL) {
+    fw_time_deinit(&g_current_time);
     LOG_DEBUG("g_current_time deinitialized");
   }
   return 0;
