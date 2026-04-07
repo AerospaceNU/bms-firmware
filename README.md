@@ -26,8 +26,6 @@ Use the Raspberry Pi Pico extension in VS Code:
 
 ### 4. Build the project
 
-◊
-
 - In VS Code, run the **Compile Project** task/button.
 - This builds the firmware in the `build/` directory.
 
