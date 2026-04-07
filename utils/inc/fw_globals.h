@@ -7,7 +7,7 @@
 
 #include "fw_time.h"
 
-fw_time_t g_current_time;
+extern fw_time_t g_current_time;
 
 //*************************************************************************************************
 
