@@ -11,8 +11,6 @@
 #include "hardware/spi.h"
 #include "fw_logic_error.h"
 
-
-
 /// @brief Initialize the RaspberryPico SPI communication protocol.
 /// @param spi_port spi0 or spi1 - the Pico port to use for SPI (check header for more info)
 /// @param baudrate the SPI baudrate (typically 1MHz)
@@ -22,11 +20,13 @@
 /// @param sdo "serial data out" GPIO pin number
 /// @return error code (or 1 if successful)
 int fw_spi_controller_init(spi_inst_t *spi_port, uint baudrate, uint cpol, uint cpha, uint order,
-  uint bits, uint sdi, uint csb, uint sck, uint sdo) {
+                           uint bits, uint sdi, uint csb, uint sck, uint sdo)
+{
   LOG_INFO("Initializing SPI Controller");
 
-  if (spi_init(spi_port, baudrate) != baudrate) {
-    LOG_ERROR("SPI initialization failed"); 
+  if (spi_init(spi_port, baudrate) != baudrate)
+  {
+    LOG_ERROR("SPI initialization failed");
     return E_SPI_INIT;
   }
 
@@ -51,7 +51,8 @@ int fw_spi_controller_init(spi_inst_t *spi_port, uint baudrate, uint cpol, uint 
 
 /// @brief Deinitialize the RaspberryPico SPI communication protocol.
 /// @param spi_port spi0 or spi1 - the Pico port to use for SPI (check header for more info)
-void fw_spi_controller_deinit(spi_inst_t *spi_port, uint sdi, uint csb, uint sck, uint sdo) {
+void fw_spi_controller_deinit(spi_inst_t *spi_port, uint sdi, uint csb, uint sck, uint sdo)
+{
   LOG_INFO("Deinitializing SPI Controller");
   spi_deinit(spi_port);
 
@@ -76,12 +77,14 @@ void fw_spi_controller_deinit(spi_inst_t *spi_port, uint sdi, uint csb, uint sck
 /// @param rx_buffer the buffer to store data read from the SPI device
 /// @param len the length of BOTH data buffers
 /// @return error code (or 1 if successful)
-int fw_spi_controller_wr_bl(spi_inst_t *spi_port, const uint8_t *tx_buffer, uint8_t *rx_buffer, size_t len, uint csb) {
+int fw_spi_controller_wr_bl(spi_inst_t *spi_port, const uint8_t *tx_buffer, uint8_t *rx_buffer, size_t len, uint csb)
+{
   // TODO: Implement SPI write read blocking
   LOG_INFO("Writing and reading data from SPI device");
-  
+
   gpio_put(csb, 0); // Assert CSB (active low)
-  if (spi_write_read_blocking(spi_port, tx_buffer, rx_buffer, len) != len) {
+  if (spi_write_read_blocking(spi_port, tx_buffer, rx_buffer, len) != len)
+  {
     LOG_ERROR("SPI write read failed");
     return E_SPI_WR;
   }
@@ -90,11 +93,13 @@ int fw_spi_controller_wr_bl(spi_inst_t *spi_port, const uint8_t *tx_buffer, uint
   return 1;
 }
 
-int fw_spi_controller_r_bl(spi_inst_t *spi_port, const uint8_t *rep_tx_buffer, uint8_t *rx_buffer, size_t len, uint csb) {
+int fw_spi_controller_r_bl(spi_inst_t *spi_port, uint8_t rep_tx_data, uint8_t *rx_buffer, size_t len, uint csb)
+{
   // TODO: Implement SPI read blocking
   LOG_INFO("Reading data from SPI device");
   gpio_put(csb, 0); // Assert CSB (active low)
-  if (spi_read_blocking(spi_port, rep_tx_buffer, rx_buffer, len) != len) {
+  if (spi_read_blocking(spi_port, rep_tx_data, rx_buffer, len) != len)
+  {
     LOG_ERROR("SPI read failed");
     return E_SPI_READ;
   }
@@ -103,11 +108,13 @@ int fw_spi_controller_r_bl(spi_inst_t *spi_port, const uint8_t *rep_tx_buffer, u
   return 1;
 }
 
-int fw_spi_controller_w_bl(spi_inst_t *spi_port, const uint8_t *tx_buffer, size_t len, uint csb) {
+int fw_spi_controller_w_bl(spi_inst_t *spi_port, const uint8_t *tx_buffer, size_t len, uint csb)
+{
   // TODO: Implement SPI write blocking
   LOG_INFO("Writing data to SPI device");
   gpio_put(csb, 0); // Assert CSB (active low)
-  if (spi_write_blocking(spi_port, tx_buffer, len) != len) {
+  if (spi_write_blocking(spi_port, tx_buffer, len) != len)
+  {
     LOG_ERROR("SPI write failed");
     return E_SPI_WRITE;
   }
