@@ -50,7 +50,8 @@ target_link_libraries(bms-firmware
 
 # Add any user requested libraries
 target_link_libraries(bms-firmware 
-        hardware_spi)
+    hardware_spi
+    hardware_i2c)
 
 # Add the standard include files to the build
 target_include_directories(bms-firmware PRIVATE
@@ -61,9 +62,9 @@ target_include_directories(bms-firmware PRIVATE
 )
 
 # Collect all source files from drivers, logic, and utils directories
-file(GLOB DRIVERS_SRC "${CMAKE_CURRENT_LIST_DIR}/drivers/src/*.c")
-file(GLOB LOGIC_SRC   "${CMAKE_CURRENT_LIST_DIR}/logic/src/*.c")
-file(GLOB UTILS_SRC   "${CMAKE_CURRENT_LIST_DIR}/utils/src/*.c")
+file(GLOB DRIVERS_SRC CONFIGURE_DEPENDS "${CMAKE_CURRENT_LIST_DIR}/drivers/src/*.c")
+file(GLOB LOGIC_SRC   CONFIGURE_DEPENDS "${CMAKE_CURRENT_LIST_DIR}/logic/src/*.c")
+file(GLOB UTILS_SRC   CONFIGURE_DEPENDS "${CMAKE_CURRENT_LIST_DIR}/utils/src/*.c")
 
 # Add these files to your executable target
 target_sources(bms-firmware PRIVATE ${DRIVERS_SRC} ${LOGIC_SRC} ${UTILS_SRC})
