@@ -1,257 +1,904 @@
-// Global Includes
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-
-// Local Includes
 #include "fw_bq76972.h"
-#include "fw_driver_spi.h"
-#include "fw_util_logging.h"
-#include "fw_logic_error.h"
-#include "fw_constants.h"
 
-static uint8_t _calculate_checksum(uint16_t mem_addr, size_t len);
+#include <stdio.h>
 
-/**
- * @brief Initialize BQ76972 SPI Interface
- * @param spi_port spi0 or spi1 - the Pico port to use for SPI (check header for more info)
- * @return error code (or 1 if successful)
- */
-int fw_bq76972_spi_init()
+#include "hardware/spi.h"
+#include "pico/stdlib.h"
+
+// ============================================================================
+// Configuration
+// ============================================================================
+
+#define SPI_PORT spi0
+#define PIN_RX 0
+#define PIN_CS 1
+#define PIN_SCK 2
+#define PIN_TX 3
+
+#define SPI_BAUDRATE (250 * 1000)
+#define BITS_PER_TRANSFER 8
+#define SPI_CPOL 0
+#define SPI_CPHA 0
+#define SPI_ORDER 1
+
+#define SPI_TRANSACTION_DELAY_US 2000
+#define SPI_MAX_RETRIES 10
+#define WAKEUP_DELAY_MS 5
+#define SPI_RETRY_BACKOFF_US 2000
+
+#define SUBCOMMAND_LOWER 0x3E
+#define SUBCOMMAND_UPPER 0x3F
+#define RESPONSE_BUFFER_START 0x40
+#define RESPONSE_BUFFER_CHKSUM 0x60
+#define RESPONSE_BUFFER_LENGTH 0x61
+
+#define DATA_MEMORY_MAX_BYTES 32
+#define DATA_MEMORY_RESPONSE_DELAY_US 10000
+#define CONFIG_SETTLE_DELAY_MS 100
+
+// Data memory addresses for pin configuration
+#define DFETOFF_CONFIG_ADDR 0x92FB
+#define TS1_CONFIG_ADDR 0x92FD
+#define TS2_CONFIG_ADDR 0x92FE
+#define DA_CONFIG_ADDR 0x9303
+#define TS3_CONFIG_ADDR 0x92FF
+#define DCHG_CONFIG_ADDR 0x9301
+#define DDSG_CONFIG_ADDR 0x9302
+
+// For dedicated TS pins (TS1, TS2, TS3):
+//   PIN_FXN[2:0] = 0b111 = thermistor mode
+//   OPT[1:0] (bits [4:3]) = 00 = used for protections, 18K temperature model
+//   OPT[3:2] (bits [6:5]) = 00 = 18K pull-up
+// 0x07 matches TI's reference code for cell temperature thermistors.
+#define THERMISTOR_CONFIG_TS_PIN 0x07
+
+// For multifunction pins (DFETOFF, DCHG, DDSG):
+//   PIN_FXN[2:0] = 0b011 = ADC input / thermistor mode
+//   OPT[1:0] (bits [4:3]) = 01 = thermistor, reported but not used for protections
+//   OPT[3:2] (bits [6:5]) = 00 = 18K temperature model
+//   OPT[5:4] (bits [8:7]) = 00 = 18K pull-up
+#define THERMISTOR_CONFIG_MULTIFUNCTION_PIN 0x0B
+
+#define THERMISTOR_TS_DEFAULT_CONFIG THERMISTOR_CONFIG_TS_PIN
+#define THERMISTOR_MF_DEFAULT_CONFIG THERMISTOR_CONFIG_MULTIFUNCTION_PIN
+
+#define DEBUG 0
+
+// Cached USER_AMPS setting — updated by bq76972_configure_user_amps()
+static user_amps_t cached_user_amps = USER_AMPS_1_MA;
+
+// ============================================================================
+// Private Helper Functions
+// ============================================================================
+
+static void print_hex(uint8_t data[], size_t length)
 {
-    LOG_INFO("Initializing BQ76972 SPI Interface...");
-    uint err = fw_spi_controller_init(SPI_PORT, BAUD_RATE, POLARITY, PHASE, ORDER, BITS_PER_WORD, PIN_SDI, PIN_CSB, PIN_SCK, PIN_SDO);
-    if (err != 1)
+    if (!DEBUG)
     {
-        LOG_ERROR("Failed to initialize BQ76972 SPI Interface");
-        return err;
+        return;
     }
-    LOG_INFO("BQ76972 SPI Interface initialized successfully");
-    return 1;
+
+    printf("0x");
+    for (size_t i = 0; i < length; i++)
+    {
+        printf("%02X", data[i]);
+    }
+    printf("\n");
 }
 
-/**
- * @brief Deinitialize BQ76972 SPI Interface
- * @param spi_port spi0 or spi1 - the Pico port to use for SPI (check header for more info)
- * @param sdi "serial data in" GPIO pin number
- * @param csb "chip select (active low)" GPIO pin number
- * @param sck "serial clock" GPIO pin number
- * @param sdo "serial data out" GPIO pin number
- * @return error code (or 1 if successful)
- */
-void fw_bq76972_spi_deinit()
+static uint8_t calculate_crc(uint8_t data[], size_t length)
 {
-    LOG_INFO("Deinitializing BQ76972 SPI Interface...");
-    fw_spi_controller_deinit(SPI_PORT, PIN_SDI, PIN_CSB, PIN_SCK, PIN_SDO);
-    LOG_INFO("BQ76972 SPI Interface deinitialized successfully");
-}
+    uint8_t crc = 0;
 
-/**
- * @brief Write Data to BQ76972 Data Memory Address
- * @param mem_addr Memory address to write data
- * @param data Data to write to memory address
- * @param len Length of data in bytes
- * @return error code (or 1 if successful)
- */
-int fw_bq76972_write_data_mem(uint16_t mem_addr, uint8_t *data, size_t len)
-{
-    /* Steps
-     * Write LOWER_BYTE register with lower byte of addr
-     * Write UPPER_BYTE register with upper byte of addr
-     * Write data to transfer buffer register (0x40 to 0x5F) in little endian format
-     * Write checksum of data written to 0x60
-     * Write length of data to 0x61
-     * Verify data by reading back from memory address
-     */
-
-    // Split mem_addr into lower and upper bytes
-    uint8_t address[2] = {(uint8_t)(mem_addr & 0xFF), (uint8_t)((mem_addr >> 8) & 0xFF)};
-    // Write LOWER_BYTE and UPPER_BYTE registers
-    int err = fw_bq76971_write_register(REG_ADDRESS, address, 2);
-    if (err != 1)
+    for (size_t i = 0; i < length; i++)
     {
-        LOG_ERROR("Failed to write memory address to BQ76972");
-        return err;
-    }
-
-    // Prepare data to write in little endian format
-    uint8_t *data_buffer = data;
-
-    // Write data to transfer buffer
-    err = fw_bq76971_write_register(TRANSFER_BUFFER, data_buffer, len);
-    if (err != 1)
-    {
-        LOG_ERROR("Failed to write data to BQ76972 transfer buffer");
-        return err;
-    }
-    // Calculate checksum
-    size_t integrity_len = len + 2 + 2; // +2 for address bytes, +2 for integrity bytes
-    uint8_t checksum = _calculate_checksum(mem_addr, integrity_len);
-    // Write checksum and length to INTEGRITY_ADDRESS
-    uint8_t integrity[2] = {checksum, integrity_len};
-    err = fw_bq76971_write_register(INTEGRITY_ADDRESS, integrity, 2);
-    if (err != 1)
-    {
-        LOG_ERROR("Failed to write integrity data to BQ76972");
-        return err;
-    }
-
-    // Verify data by reading back from memory address
-    uint8_t verify_data[len];
-    uint16_t verify_addr;
-    err = fw_bq76972_read_data_subcommand(mem_addr, &verify_addr);
-    if (err != 1)
-    {
-        LOG_ERROR("Failed to verify data written to BQ76972");
-        return err;
-    }
-    if (memcmp(verify_data, data, len) != 0)
-    {
-        LOG_ERROR("Data verification mismatch for BQ76972 write");
-        return E_BQ76972_WRITE;
-    }
-    return 1;
-}
-
-/**
- * @brief Read Data from BQ76972 Subcommand
- * @param mem_addr Memory address to read data from
- * @param data Pointer to store data read from memory address
- * @return error code (or 1 if successful)
- */
-int fw_bq76972_read_data_subcommand(uint16_t mem_addr, uint16_t *data)
-{
-    /* Steps
-     * Write LOWER_BYTE register with lower byte of addr
-     * Write UPPER_BYTE register with upper byte of addr
-     * Read register 0x3E and 0x3F to get operation status
-     * if both registers return 0xFF, then operation has not completed,
-     * retry until registers read what was written originally
-     * Read length of response from 0x61
-     * Read buffer from 0x40 to 0x5F for expected length
-     * Read checksum from 0x60 and verify data integrity
-     */
-
-    // Split mem_addr into lower and upper bytes
-    uint8_t address[2] = {(uint8_t)((mem_addr & 0xFF) | WRITE_BIT), (uint8_t)(((mem_addr >> 8) & 0xFF) | WRITE_BIT)};
-
-    // Write LOWER_BYTE and UPPER_BYTE registers
-    int err = fw_bq76971_write_register(REG_ADDRESS, address, 2);
-    if (err != 1)
-    {
-        LOG_ERROR("Failed to write memory address to BQ76972");
-        return err;
-    }
-
-    // Read operation status from 0x3E and 0x3F
-    uint8_t op_status[2];
-    do
-    {
-        int err = fw_bq76971_read_register(REG_ADDRESS, op_status, 2);
-        if (err != 1)
+        crc ^= data[i];
+        for (int j = 0; j < 8; j++)
         {
-            LOG_ERROR("Failed to read operation status from BQ76972");
-            return err;
+            if (crc & 0x80)
+            {
+                crc = (uint8_t)((crc << 1) ^ 0x07);
+            }
+            else
+            {
+                crc <<= 1;
+            }
         }
-    } while (op_status[0] == 0xFF && op_status[1] == 0xFF);
-
-    if (op_status[0] != address[LOWER_BYTE] && op_status[UPPER_BYTE] == address[1])
-    {
-        LOG_ERROR("Failed to read operation status from BQ76972");
-        return E_BQ76972_OP_STATUS;
     }
 
-    uint8_t integrity[2];
-    // Read checksum and data length from 0x60
-    err = fw_bq76971_read_register(INTEGRITY_ADDRESS, integrity, 2);
-    if (err != 1)
-    {
-        LOG_ERROR("Failed to read integrity data from BQ76972");
-        return err;
-    }
-    size_t data_len = integrity[LENGTH] - 2 - 2; // -2 for address bytes, -2 for integrity bytes
-    uint8_t transfer_buffer[data_len];
-    // Read data from transfer buffer
-    err = fw_bq76971_read_register(TRANSFER_BUFFER, transfer_buffer, data_len);
-    if (err != 1)
-    {
-        LOG_ERROR("Failed to read data from BQ76972 transfer buffer");
-        return err;
-    }
-    // Calculate checksum
+    return crc;
+}
 
-    uint8_t checksum_calc = _calculate_checksum(mem_addr, integrity[LENGTH]);
-
-    if (checksum_calc != integrity[CHECKSUM])
+static int verify_crc(uint8_t rx_buf[], size_t length)
+{
+    if (length < 3)
     {
-        LOG_ERROR("Checksum verification failed for BQ76972 data read");
-        return E_BQ76972_READ;
+        return 0;
     }
-    // Copy data to output parameter
-    memcpy(data, transfer_buffer, integrity[LENGTH]);
+
+    // Special cases documented by TI for SPI responses
+    if (rx_buf[0] == 0xFF && rx_buf[1] == 0xFF &&
+        (rx_buf[2] == 0xFF || rx_buf[2] == 0x00))
+    {
+        return 1;
+    }
+
+    return rx_buf[2] == calculate_crc(rx_buf, 2);
+}
+
+static int is_internal_osc_asleep(uint8_t rx_buf[])
+{
+    return rx_buf[0] == 0xFF && rx_buf[1] == 0xFF && rx_buf[2] == 0xFF;
+}
+
+static int is_outgoing_buffer_not_updated(uint8_t rx_buf[])
+{
+    return rx_buf[0] == 0xFF && rx_buf[1] == 0xFF && rx_buf[2] == 0x00;
+}
+
+static int spi_write_read(uint8_t tx_buf[], uint8_t rx_buf[], size_t length)
+{
+    gpio_put(PIN_CS, 0);
+    spi_write_read_blocking(SPI_PORT, tx_buf, rx_buf, length);
+    gpio_put(PIN_CS, 1);
+    print_hex(rx_buf, length);
+    return verify_crc(rx_buf, length);
+}
+
+static void spi_write(uint8_t tx_buf[], size_t length)
+{
+    gpio_put(PIN_CS, 0);
+    spi_write_blocking(SPI_PORT, tx_buf, length);
+    gpio_put(PIN_CS, 1);
+}
+
+static int spi_read(uint8_t rx_buf[], size_t length)
+{
+    gpio_put(PIN_CS, 0);
+    spi_read_blocking(SPI_PORT, 0x00, rx_buf, length);
+    gpio_put(PIN_CS, 1);
+    print_hex(rx_buf, length);
+    return verify_crc(rx_buf, length);
+}
+
+static uint8_t calculate_dm_checksum(uint16_t addr, const uint8_t *data, size_t len)
+{
+    uint16_t sum = (uint16_t)(addr & 0xFFU) + (uint16_t)((addr >> 8) & 0xFFU);
+
+    for (size_t i = 0; i < len; i++)
+    {
+        sum = (uint16_t)(sum + data[i]);
+    }
+
+    return (uint8_t)(~sum);
+}
+
+// Write two consecutive direct-command registers as two separate SPI transactions.
+// The BQ769x2 SPI interface only supports single-byte register writes per
+// transaction (unlike I2C which supports block writes).
+static int bq76972_write_direct_pair(uint8_t command_lsb,
+                                     uint8_t value_lsb,
+                                     uint8_t command_msb,
+                                     uint8_t value_msb)
+{
+    if ((uint8_t)(command_lsb + 1U) != command_msb)
+    {
+        return SPI_UNKNOWN_ERR;
+    }
+
+    // First register write: command_lsb = value_lsb
+    int result = bq76972_write_direct(command_lsb, value_lsb);
+    if (result != SUCCESS)
+    {
+        return result;
+    }
+
+    // Second register write: command_msb = value_msb
+    return bq76972_write_direct(command_msb, value_msb);
+}
+
+// ============================================================================
+// Public API Functions
+// ============================================================================
+
+void bq76972_init(void)
+{
+    spi_init(SPI_PORT, SPI_BAUDRATE);
+    spi_set_format(SPI_PORT, BITS_PER_TRANSFER, SPI_CPOL, SPI_CPHA, SPI_ORDER);
+
+    gpio_set_function(PIN_RX, GPIO_FUNC_SPI);
+    gpio_pull_up(PIN_RX);
+    gpio_set_function(PIN_SCK, GPIO_FUNC_SPI);
+    gpio_set_function(PIN_TX, GPIO_FUNC_SPI);
+
+    gpio_set_function(PIN_CS, GPIO_FUNC_SIO);
+    gpio_set_dir(PIN_CS, GPIO_OUT);
+    gpio_put(PIN_CS, 1);
+}
+
+int bq76972_read_direct(uint8_t command, uint8_t *data)
+{
+    if (data == NULL)
+    {
+        return SPI_UNKNOWN_ERR;
+    }
+
+    size_t tries = 0;
+    int err_code = SPI_UNKNOWN_ERR;
+    uint8_t tx_buf[3] = {command, 0x00, 0x00};
+    uint8_t rx_buf[3] = {0};
+
+    tx_buf[2] = calculate_crc(tx_buf, 2);
+
+    while (tries < SPI_MAX_RETRIES)
+    {
+        spi_write(tx_buf, 3);
+        sleep_us(SPI_TRANSACTION_DELAY_US);
+
+        if (!spi_read(rx_buf, 3))
+        {
+            err_code = SPI_CRC_MISMATCH_ERR;
+            tries++;
+            sleep_us(SPI_RETRY_BACKOFF_US);
+            continue;
+        }
+
+        if (is_outgoing_buffer_not_updated(rx_buf))
+        {
+            err_code = SPI_READ_TOO_FAST_ERR;
+            tries++;
+            sleep_us(SPI_RETRY_BACKOFF_US);
+            continue;
+        }
+
+        if (is_internal_osc_asleep(rx_buf))
+        {
+            err_code = SPI_INTERNAL_OSC_ASLEEP_ERR;
+            tries++;
+            bq76972_wakeup();
+            sleep_ms(WAKEUP_DELAY_MS);
+            continue;
+        }
+
+        if (rx_buf[0] != command)
+        {
+            err_code = SPI_UNEXPECTED_RESPONSE_ERR;
+            tries++;
+            sleep_us(SPI_RETRY_BACKOFF_US);
+            continue;
+        }
+
+        *data = rx_buf[1];
+        return SUCCESS;
+    }
+
+    return err_code;
+}
+
+int bq76972_write_direct(uint8_t command, uint8_t data)
+{
+    // BQ769x2 SPI protocol: bit 7 of the first byte indicates R/W.
+    // Bit 7 = 0 for read, bit 7 = 1 for write.
+    uint8_t tx_buf[3] = {(uint8_t)(command | 0x80U), data, 0x00};
+    tx_buf[2] = calculate_crc(tx_buf, 2);
+    spi_write(tx_buf, 3);
+    sleep_us(SPI_TRANSACTION_DELAY_US);
+    return SUCCESS;
+}
+
+int bq76972_send_subcommand(uint16_t subcommand)
+{
+    return bq76972_write_direct_pair(SUBCOMMAND_LOWER,
+                                     (uint8_t)(subcommand & 0xFFU),
+                                     SUBCOMMAND_UPPER,
+                                     (uint8_t)((subcommand >> 8) & 0xFFU));
+}
+
+int bq76972_enter_config_update(void)
+{
+    int result = bq76972_send_subcommand(0x0090);
+    if (result == SUCCESS)
+    {
+        sleep_ms(2);
+    }
+    return result;
+}
+
+int bq76972_exit_config_update(void)
+{
+    int result = bq76972_send_subcommand(0x0092);
+    if (result == SUCCESS)
+    {
+        sleep_ms(100);
+    }
+    return result;
+}
+
+int bq76972_write_data_memory(uint16_t addr, const uint8_t *data, size_t len,
+                              bool use_config_update)
+{
+    if (data == NULL || len == 0 || len > DATA_MEMORY_MAX_BYTES)
+    {
+        return SPI_UNKNOWN_ERR;
+    }
+
+    int result = SUCCESS;
+
+    if (use_config_update)
+    {
+        result = bq76972_enter_config_update();
+        if (result != SUCCESS)
+        {
+            return result;
+        }
+    }
+
+    result = bq76972_write_direct_pair(SUBCOMMAND_LOWER,
+                                       (uint8_t)(addr & 0xFFU),
+                                       SUBCOMMAND_UPPER,
+                                       (uint8_t)((addr >> 8) & 0xFFU));
+
+    for (size_t i = 0; i < len && result == SUCCESS; i++)
+    {
+        result = bq76972_write_direct((uint8_t)(RESPONSE_BUFFER_START + i), data[i]);
+    }
+
+    if (result == SUCCESS)
+    {
+        uint8_t checksum = calculate_dm_checksum(addr, data, len);
+        uint8_t total_length = (uint8_t)(len + 4U);
+
+        result = bq76972_write_direct_pair(RESPONSE_BUFFER_CHKSUM,
+                                           checksum,
+                                           RESPONSE_BUFFER_LENGTH,
+                                           total_length);
+    }
+
+    if (use_config_update)
+    {
+        int exit_result = bq76972_exit_config_update();
+        if (result == SUCCESS)
+        {
+            result = exit_result;
+        }
+    }
+
+    if (result == SUCCESS)
+    {
+        sleep_ms(CONFIG_SETTLE_DELAY_MS);
+    }
+
+    return result;
+}
+
+int bq76972_write_data_memory_u8(uint16_t addr, uint8_t value, bool use_config_update)
+{
+    return bq76972_write_data_memory(addr, &value, 1, use_config_update);
+}
+
+int bq76972_write_data_memory_u16(uint16_t addr, uint16_t value, bool use_config_update)
+{
+    uint8_t bytes[2] = {
+        (uint8_t)(value & 0xFFU),
+        (uint8_t)((value >> 8) & 0xFFU),
+    };
+
+    return bq76972_write_data_memory(addr, bytes, 2, use_config_update);
+}
+
+int bq76972_read_data_memory(uint16_t addr, uint8_t *data, size_t len)
+{
+    if (data == NULL || len == 0 || len > DATA_MEMORY_MAX_BYTES)
+    {
+        return SPI_UNKNOWN_ERR;
+    }
+
+    int result = bq76972_write_direct_pair(SUBCOMMAND_LOWER,
+                                           (uint8_t)(addr & 0xFFU),
+                                           SUBCOMMAND_UPPER,
+                                           (uint8_t)((addr >> 8) & 0xFFU));
+    if (result != SUCCESS)
+    {
+        return result;
+    }
+
+    // Poll until the response buffer is fully populated:
+    //   - 0x3E echoes back the lower address byte
+    //   - 0x61 (response length) is non-zero
+    bool ready = false;
+    for (int attempt = 0; attempt < 3 && !ready; attempt++)
+    {
+        if (attempt > 0)
+        {
+            bq76972_wakeup();
+            result = bq76972_write_direct_pair(SUBCOMMAND_LOWER,
+                                               (uint8_t)(addr & 0xFFU),
+                                               SUBCOMMAND_UPPER,
+                                               (uint8_t)((addr >> 8) & 0xFFU));
+            if (result != SUCCESS)
+            {
+                return result;
+            }
+        }
+
+        for (int poll = 0; poll < 50; poll++)
+        {
+            uint8_t subcmd_lo = 0xFF;
+            uint8_t resp_len = 0;
+
+            result = bq76972_read_direct(SUBCOMMAND_LOWER, &subcmd_lo);
+            if (result == SUCCESS)
+            {
+                result = bq76972_read_direct(RESPONSE_BUFFER_LENGTH, &resp_len);
+            }
+
+            if (result == SUCCESS &&
+                subcmd_lo == (uint8_t)(addr & 0xFFU) && resp_len > 0)
+            {
+                ready = true;
+                break;
+            }
+            sleep_ms(2);
+        }
+    }
+
+    if (!ready)
+    {
+        printf("[DM_READ 0x%04X] Response buffer never ready\n", addr);
+        return SPI_READ_TOO_FAST_ERR;
+    }
+
+    // Read length to determine how many buffer bytes the device populated.
+    // Length = subcmd(2) + chk/len(2) + buffer_data_bytes.
+    uint8_t reported_length = 0;
+    result = bq76972_read_direct(RESPONSE_BUFFER_LENGTH, &reported_length);
+    if (result != SUCCESS)
+    {
+        return result;
+    }
+
+    size_t buf_data_len = (reported_length > 4) ? (reported_length - 4) : 0;
+    if (buf_data_len == 0 || buf_data_len > DATA_MEMORY_MAX_BYTES)
+    {
+        printf("[DM_READ 0x%04X] Invalid response length: %d\n",
+               addr, reported_length);
+        return SPI_UNEXPECTED_RESPONSE_ERR;
+    }
+
+    // Read the full data block from the transfer buffer (0x40..0x5F).
+    uint8_t block[DATA_MEMORY_MAX_BYTES] = {0};
+    for (size_t i = 0; i < buf_data_len; i++)
+    {
+        result = bq76972_read_direct(
+            (uint8_t)(RESPONSE_BUFFER_START + i), &block[i]);
+        if (result != SUCCESS)
+        {
+            printf("[DM_READ 0x%04X] Failed reading 0x%02X (err=%d)\n",
+                   addr, (unsigned)(RESPONSE_BUFFER_START + i), result);
+            return result;
+        }
+    }
+
+    // Read the reported checksum.
+    uint8_t reported_checksum = 0;
+    result = bq76972_read_direct(RESPONSE_BUFFER_CHKSUM, &reported_checksum);
+    if (result != SUCCESS)
+    {
+        return result;
+    }
+
+    // Verify checksum: ~(0x3E_lo + 0x3F_hi + all buffer data bytes).
+    // The checksum covers the subcommand address bytes + full buffer block.
+    uint8_t computed_checksum = calculate_dm_checksum(addr, block, buf_data_len);
+
+    printf("[DM_READ 0x%04X] block_len=%zu chk: reported=0x%02X computed=0x%02X\n",
+           addr, buf_data_len, reported_checksum, computed_checksum);
+
+    if (reported_checksum != computed_checksum)
+    {
+        printf("[DM_READ 0x%04X] Checksum mismatch\n", addr);
+        return SPI_CRC_MISMATCH_ERR;
+    }
+
+    // The device always returns a full 32-byte block aligned to the base
+    // address written to 0x3E/0x3F. For data memory, the requested byte(s)
+    // start at offset 0 within the block (the address we wrote is the base).
+    if (len > buf_data_len)
+    {
+        printf("[DM_READ 0x%04X] Requested %zu bytes but block has %zu\n",
+               addr, len, buf_data_len);
+        return SPI_UNEXPECTED_RESPONSE_ERR;
+    }
+
+    for (size_t i = 0; i < len; i++)
+    {
+        data[i] = block[i];
+    }
+
+    return SUCCESS;
+}
+
+int bq76972_read_data_memory_u8(uint16_t addr, uint8_t *value)
+{
+    return bq76972_read_data_memory(addr, value, 1);
+}
+
+int bq76972_read_data_memory_u16(uint16_t addr, uint16_t *value)
+{
+    if (value == NULL)
+    {
+        return SPI_UNKNOWN_ERR;
+    }
+
+    uint8_t bytes[2] = {0};
+    int result = bq76972_read_data_memory(addr, bytes, 2);
+    if (result == SUCCESS)
+    {
+        *value = (uint16_t)bytes[0] | ((uint16_t)bytes[1] << 8);
+    }
+    return result;
+}
+
+int bq76972_read_u16(uint8_t lsb_command, uint16_t *value)
+{
+    if (value == NULL)
+    {
+        return SPI_UNKNOWN_ERR;
+    }
+
+    uint8_t lsb = 0;
+    uint8_t msb = 0;
+    int last_error = SPI_UNKNOWN_ERR;
+
+    for (int i = 0; i < SPI_MAX_RETRIES; i++)
+    {
+        int result = bq76972_read_direct(lsb_command, &lsb);
+        if (result != SUCCESS)
+        {
+            last_error = result;
+            continue;
+        }
+
+        result = bq76972_read_direct((uint8_t)(lsb_command + 1U), &msb);
+        if (result != SUCCESS)
+        {
+            last_error = result;
+            continue;
+        }
+
+        *value = (uint16_t)lsb | ((uint16_t)msb << 8);
+        return SUCCESS;
+    }
+
+    return last_error;
+}
+
+int bq76972_read_cell_voltage(cell_voltage_t cell, uint16_t *voltage_mv)
+{
+    return bq76972_read_u16((uint8_t)cell, voltage_mv);
+}
+
+int bq76972_read_all_cell_voltages(uint16_t *voltages, size_t num_cells)
+{
+    if (voltages == NULL || num_cells == 0)
+    {
+        return 0;
+    }
+
+    for (size_t i = 0; i < num_cells; i++)
+    {
+        cell_voltage_t cell = (cell_voltage_t)(CELL_1 + (i * 2));
+        if (bq76972_read_cell_voltage(cell, &voltages[i]) != SUCCESS)
+        {
+            return 0;
+        }
+    }
+
     return 1;
 }
 
-/**
- * @brief Read SPI Register from BQ76972
- * @param reg_addr Register address to read from
- * @param data Pointer to store data read from register
- * @param len Length of data to read
- * @return error code (or 1 if successful)
- */
-int fw_bq76971_read_register(uint8_t reg_addr, uint8_t *data, size_t len)
+int bq76972_read_temperature(thermistor_t sensor, int16_t *temperature_dK)
 {
-    uint8_t tx_buffer[len + 1];
-    memset(tx_buffer, 0x00, sizeof tx_buffer);     // Initialize entire buffer to 0x00
-    tx_buffer[0] = (uint8_t)(reg_addr & READ_BIT); // Set the first byte to the register address
-    uint8_t rx_buffer[len + 1];
-
-    if (fw_spi_controller_wr_bl(SPI_PORT, tx_buffer, rx_buffer, len + 1, PIN_CSB) != 1)
+    if (temperature_dK == NULL)
     {
-        LOG_ERROR("Failed to read register from BQ76972");
-        return E_BQ76972_READ;
+        return SPI_UNKNOWN_ERR;
     }
 
-    memcpy(&rx_buffer[1], data, len); // Copy received data excluding the first byte (register address)
-    return 1;
-}
-
-/**
- * @brief Write SPI Register to BQ76972
- * @param reg_addr Register address to write to
- * @param data Pointer to data to write to register
- * @param len Length of data to write
- * @return error code (or 1 if successful)
- */
-int fw_bq76971_write_register(uint8_t reg_addr, uint8_t *data, size_t len)
-{
-    uint8_t tx_buffer[len + 1];
-    tx_buffer[0] = (uint8_t)(reg_addr | WRITE_BIT); // Set the first byte to the register address
-    memcpy(&tx_buffer[1], data, len);               // Copy data to be written after the register address
-
-    if (fw_spi_controller_w_bl(SPI_PORT, tx_buffer, len + 1, PIN_CSB) != 1)
+    uint16_t raw_value = 0;
+    int result = bq76972_read_u16((uint8_t)sensor, &raw_value);
+    if (result == SUCCESS)
     {
-        LOG_ERROR("Failed to write register to BQ76972");
-        return E_BQ76972_WRITE;
+        *temperature_dK = (int16_t)raw_value;
     }
 
-    return 1;
+    return result;
 }
 
-/**
- * @brief Calculate checksum for BQ76972 data transfer
- * @param mem_addr Memory address involved in the transfer
- * @param len Length of data being transferred
- * @return Calculated checksum byte
- */
-uint8_t _calculate_checksum(uint16_t mem_addr, size_t len)
+int bq76972_read_all_temperatures(const thermistor_t *sensors,
+                                  int16_t *temperatures_dK,
+                                  size_t num_sensors)
 {
-    uint8_t checksum = 0;
-    // Add lower and upper bytes of memory address
-    checksum += (uint8_t)(mem_addr & 0xFF);
-    checksum += (uint8_t)((mem_addr >> 8) & 0xFF);
-    // Add length byte
-    checksum += (uint8_t)(len & 0xFF);
-    // Return bitwise inverted checksum
-    return ~checksum;
+    if (sensors == NULL || temperatures_dK == NULL || num_sensors == 0)
+    {
+        return SPI_UNKNOWN_ERR;
+    }
+
+    for (size_t i = 0; i < num_sensors; i++)
+    {
+        int result = bq76972_read_temperature(sensors[i], &temperatures_dK[i]);
+        if (result != SUCCESS)
+        {
+            return result;
+        }
+    }
+
+    return SUCCESS;
+}
+
+float bq76972_temperature_dK_to_c(int16_t temperature_dK)
+{
+    return ((float)temperature_dK / 10.0f) - 273.15f;
+}
+
+int bq76972_configure_thermistors(uint8_t ts1_config,
+                                  uint8_t ts2_config,
+                                  uint8_t ts3_config,
+                                  uint8_t dfetoff_config,
+                                  uint8_t dchg_config,
+                                  uint8_t ddsg_config)
+{
+    int result = bq76972_enter_config_update();
+    if (result != SUCCESS)
+    {
+        return result;
+    }
+
+    result = bq76972_write_data_memory_u8(DFETOFF_CONFIG_ADDR, dfetoff_config, false);
+    if (result == SUCCESS)
+    {
+        result = bq76972_write_data_memory_u8(TS1_CONFIG_ADDR, ts1_config, false);
+    }
+    if (result == SUCCESS)
+    {
+        result = bq76972_write_data_memory_u8(TS2_CONFIG_ADDR, ts2_config, false);
+    }
+    if (result == SUCCESS)
+    {
+        result = bq76972_write_data_memory_u8(TS3_CONFIG_ADDR, ts3_config, false);
+    }
+    if (result == SUCCESS)
+    {
+        result = bq76972_write_data_memory_u8(DCHG_CONFIG_ADDR, dchg_config, false);
+    }
+    if (result == SUCCESS)
+    {
+        result = bq76972_write_data_memory_u8(DDSG_CONFIG_ADDR, ddsg_config, false);
+    }
+
+    {
+        int exit_result = bq76972_exit_config_update();
+        if (result == SUCCESS)
+        {
+            result = exit_result;
+        }
+    }
+
+    if (result == SUCCESS)
+    {
+        sleep_ms(CONFIG_SETTLE_DELAY_MS);
+    }
+
+    return result;
+}
+
+int bq76972_configure_thermistors_default(void)
+{
+    return bq76972_configure_thermistors(THERMISTOR_TS_DEFAULT_CONFIG,
+                                         THERMISTOR_TS_DEFAULT_CONFIG,
+                                         THERMISTOR_TS_DEFAULT_CONFIG,
+                                         THERMISTOR_MF_DEFAULT_CONFIG,
+                                         THERMISTOR_MF_DEFAULT_CONFIG,
+                                         THERMISTOR_MF_DEFAULT_CONFIG);
+}
+
+int bq76972_read_thermistor_pin_configs(uint8_t *ts1_config,
+                                        uint8_t *ts2_config,
+                                        uint8_t *ts3_config,
+                                        uint8_t *dfetoff_config,
+                                        uint8_t *dchg_config,
+                                        uint8_t *ddsg_config)
+{
+    if (ts1_config == NULL || ts2_config == NULL || ts3_config == NULL ||
+        dfetoff_config == NULL || dchg_config == NULL || ddsg_config == NULL)
+    {
+        return SPI_UNKNOWN_ERR;
+    }
+
+    int result = bq76972_read_data_memory_u8(DFETOFF_CONFIG_ADDR, dfetoff_config);
+    if (result == SUCCESS)
+    {
+        result = bq76972_read_data_memory_u8(TS1_CONFIG_ADDR, ts1_config);
+    }
+    if (result == SUCCESS)
+    {
+        result = bq76972_read_data_memory_u8(TS2_CONFIG_ADDR, ts2_config);
+    }
+    if (result == SUCCESS)
+    {
+        result = bq76972_read_data_memory_u8(TS3_CONFIG_ADDR, ts3_config);
+    }
+    if (result == SUCCESS)
+    {
+        result = bq76972_read_data_memory_u8(DCHG_CONFIG_ADDR, dchg_config);
+    }
+    if (result == SUCCESS)
+    {
+        result = bq76972_read_data_memory_u8(DDSG_CONFIG_ADDR, ddsg_config);
+    }
+
+    return result;
+}
+
+int bq76972_verify_thermistor_config(void)
+{
+    uint8_t ts1, ts2, ts3, dfetoff, dchg, ddsg;
+
+    int result = bq76972_read_thermistor_pin_configs(&ts1, &ts2, &ts3,
+                                                     &dfetoff, &dchg, &ddsg);
+    if (result != SUCCESS)
+    {
+        printf("[BQ76972] Failed to read thermistor configs (err=%d)\n", result);
+        return result;
+    }
+
+    printf("[BQ76972] Thermistor config readback:\n");
+    printf("  TS1=0x%02X  TS2=0x%02X  TS3=0x%02X\n", ts1, ts2, ts3);
+    printf("  DFETOFF=0x%02X  DCHG=0x%02X  DDSG=0x%02X\n", dfetoff, dchg, ddsg);
+
+    int ok = 1;
+    if (ts1 == 0x00)
+    {
+        printf("[BQ76972] WARNING: TS1 config is 0x00 (not enabled)\n");
+        ok = 0;
+    }
+    if (ts2 == 0x00)
+    {
+        printf("[BQ76972] WARNING: TS2 config is 0x00 (not enabled)\n");
+        ok = 0;
+    }
+    if (ts3 == 0x00)
+    {
+        printf("[BQ76972] WARNING: TS3 config is 0x00 (not enabled)\n");
+        ok = 0;
+    }
+    if (dfetoff == 0x00)
+    {
+        printf("[BQ76972] WARNING: DFETOFF config is 0x00 (not enabled)\n");
+        ok = 0;
+    }
+    if (dchg == 0x00)
+    {
+        printf("[BQ76972] WARNING: DCHG config is 0x00 (not enabled)\n");
+        ok = 0;
+    }
+    if (ddsg == 0x00)
+    {
+        printf("[BQ76972] WARNING: DDSG config is 0x00 (not enabled)\n");
+        ok = 0;
+    }
+
+    if (!ok)
+    {
+        printf("[BQ76972] One or more thermistor pins failed to configure!\n");
+    }
+
+    return ok ? SUCCESS : SPI_UNEXPECTED_RESPONSE_ERR;
+}
+
+int bq76972_configure_user_amps(user_amps_t setting)
+{
+    uint8_t da_config = 0;
+    int result = bq76972_read_data_memory_u8(DA_CONFIG_ADDR, &da_config);
+    if (result != SUCCESS)
+    {
+        return result;
+    }
+
+    // USER_AMPS occupies bits [1:0]
+    da_config = (uint8_t)((da_config & 0xFC) | ((uint8_t)setting & 0x03));
+
+    result = bq76972_write_data_memory_u8(DA_CONFIG_ADDR, da_config, true);
+    if (result == SUCCESS)
+    {
+        cached_user_amps = setting;
+    }
+    return result;
+}
+
+int bq76972_read_user_amps(user_amps_t *setting)
+{
+    if (setting == NULL)
+    {
+        return SPI_UNKNOWN_ERR;
+    }
+
+    uint8_t da_config = 0;
+    int result = bq76972_read_data_memory_u8(DA_CONFIG_ADDR, &da_config);
+    if (result == SUCCESS)
+    {
+        *setting = (user_amps_t)(da_config & 0x03);
+        cached_user_amps = *setting;
+    }
+    return result;
+}
+
+int bq76972_read_current_raw(int16_t *raw)
+{
+    if (raw == NULL)
+    {
+        return SPI_UNKNOWN_ERR;
+    }
+
+    uint16_t val = 0;
+    int result = bq76972_read_u16(0x3A, &val);
+    if (result == SUCCESS)
+    {
+        *raw = (int16_t)val;
+    }
+    return result;
+}
+
+int bq76972_read_current_mA(int32_t *current_mA)
+{
+    if (current_mA == NULL)
+    {
+        return SPI_UNKNOWN_ERR;
+    }
+
+    int16_t raw = 0;
+    int result = bq76972_read_current_raw(&raw);
+    if (result != SUCCESS)
+    {
+        return result;
+    }
+
+    static const float scale[] = {0.1f, 1.0f, 10.0f, 100.0f};
+    *current_mA = (int32_t)((float)raw * scale[cached_user_amps & 0x03]);
+    return SUCCESS;
+}
+
+int bq76972_read_all_thermistor_values(int16_t *temperatures_dK,
+                                       size_t num_temperatures)
+{
+    static const thermistor_t thermistors[BQ76972_THERMISTOR_COUNT] = {
+        TS1_THERMISTOR,
+        TS2_THERMISTOR,
+        TS3_THERMISTOR,
+        DFETOFF_THERMISTOR,
+        DCHG_THERMISTOR,
+        DDSG_THERMISTOR,
+    };
+
+    if (temperatures_dK == NULL ||
+        num_temperatures < (size_t)BQ76972_THERMISTOR_COUNT)
+    {
+        return SPI_UNKNOWN_ERR;
+    }
+
+    bq76972_wakeup();
+    sleep_ms(2);
+
+    return bq76972_read_all_temperatures(thermistors,
+                                         temperatures_dK,
+                                         BQ76972_THERMISTOR_COUNT);
+}
+
+void bq76972_wakeup(void)
+{
+    uint8_t tx_buf[3] = {0x00, 0x00, 0x00};
+    tx_buf[2] = calculate_crc(tx_buf, 2);
+
+    spi_write(tx_buf, 3);
+    sleep_ms(WAKEUP_DELAY_MS);
+    (void)spi_read(tx_buf, 3);
 }

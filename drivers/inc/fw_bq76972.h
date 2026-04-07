@@ -1,43 +1,171 @@
 #ifndef FW_BQ76972_H
 #define FW_BQ76972_H
 
-/*************************************************************************************************/
-/* BQ76972 Driver */
-/*************************************************************************************************/
-
 #include <stdint.h>
+#include <stddef.h>
+#include <stdbool.h>
 
-// BQ76972 Register Addresses
-#define REG_ADDRESS         0x3E                // Register address for subcommands (16-bit address)
-#define TRANSFER_BUFFER     0x40                // Transfer buffer address (max 32 bytes)
-#define INTEGRITY_ADDRESS   0x60                // Checksum register address (2 bytes)
+// ============================================================================
+// Cell Voltage Addresses
+// ============================================================================
+typedef enum
+{
+    CELL_1 = 0x14,
+    CELL_2 = 0x16,
+    CELL_3 = 0x18,
+    CELL_4 = 0x1A,
+    CELL_5 = 0x1C,
+    CELL_6 = 0x1E,
+    CELL_7 = 0x20,
+    CELL_8 = 0x22,
+    CELL_9 = 0x24,
+    CELL_10 = 0x26,
+    CELL_11 = 0x28,
+    CELL_12 = 0x2A,
+    CELL_13 = 0x2C,
+    CELL_14 = 0x2E,
+    CELL_15 = 0x30,
+    CELL_16 = 0x32,
+    LAST_CELL = CELL_16,
+    STACK_VOLTAGE = 0x34
+} cell_voltage_t;
 
-// BQ76972 Register Definitions
-#define LOWER_BYTE          0                   // First byte of REG_ADDRESS
-#define UPPER_BYTE          1                   // Second byte of REG_ADDRESS
-#define CHECKSUM            0                   // First byte of INTEGRITY_ADDRESS
-#define LENGTH              1                   // Second byte of INTEGRITY_ADDRESS
+// ============================================================================
+// Temperature Direct Command Addresses
+// ============================================================================
+typedef enum
+{
+    INT_THERMISTOR = 0x68,
+    CFETOFF_THERMISTOR = 0x6A,
+    DFETOFF_THERMISTOR = 0x6C,
+    ALERT_THERMISTOR = 0x6E,
+    TS1_THERMISTOR = 0x70,
+    TS2_THERMISTOR = 0x72,
+    TS3_THERMISTOR = 0x74,
+    HDQ_THERMISTOR = 0x76,
+    DCHG_THERMISTOR = 0x78,
+    DDSG_THERMISTOR = 0x7A,
+} thermistor_t;
 
-// BQ76972 Operation Bits
-#define WRITE_BIT           0b10000000          // Bit to indicate write operation (bitwise OR with address)
-#define READ_BIT            0b01111111          // Bit to indicate read operation (bitwise AND with address)
+#define BQ76972_THERMISTOR_COUNT 6
 
-// BQ76972 Specifications
-#define BAUD_RATE           1000*1000           // Maximum SPI Baud Rate for BQ76972 (1 MHz)
-#define BITS_PER_WORD       8                   // Bits per word for SPI communication
-#define POLARITY            0                   // SPI Clock Polarity
-#define PHASE               0                   // SPI Clock Phase
-#define ORDER               SPI_MSB_FIRST       // SPI Data Order
+// ============================================================================
+// Error Codes
+// ============================================================================
+#define SUCCESS 1
+#define SPI_ERR(x) (100 + (x))
+#define SPI_UNKNOWN_ERR SPI_ERR(0)
+#define SPI_READ_TOO_FAST_ERR SPI_ERR(1)
+#define SPI_INTERNAL_OSC_ASLEEP_ERR SPI_ERR(2)
+#define SPI_CRC_MISMATCH_ERR SPI_ERR(3)
+#define SPI_UNEXPECTED_RESPONSE_ERR SPI_ERR(4)
 
+// ============================================================================
+// Initialization
+// ============================================================================
+void bq76972_init(void);
 
-int fw_bq76972_spi_init();
-void fw_bq76972_spi_deinit();
-int fw_bq76972_write_data_subcommand(uint16_t mem_addr, uint16_t data);
-int fw_bq76972_read_data_subcommand(uint16_t mem_addr, uint16_t *data);
-int fw_bq76971_read_register(uint8_t reg_addr, uint8_t *data, size_t len);
-int fw_bq76971_write_register(uint8_t reg_addr, uint8_t *data, size_t len);
+// ============================================================================
+// Direct Command Functions (Single Byte Read/Write)
+// ============================================================================
+int bq76972_read_direct(uint8_t command, uint8_t *data);
+int bq76972_write_direct(uint8_t command, uint8_t data);
+int bq76972_send_subcommand(uint16_t subcommand);
+int bq76972_enter_config_update(void);
+int bq76972_exit_config_update(void);
 
-/*************************************************************************************************/
+// ============================================================================
+// Data Memory Functions
+// ============================================================================
+int bq76972_write_data_memory(uint16_t addr, const uint8_t *data, size_t len,
+                              bool use_config_update);
+int bq76972_write_data_memory_u8(uint16_t addr, uint8_t value,
+                                 bool use_config_update);
+int bq76972_write_data_memory_u16(uint16_t addr, uint16_t value,
+                                  bool use_config_update);
 
+int bq76972_read_data_memory(uint16_t addr, uint8_t *data, size_t len);
+int bq76972_read_data_memory_u8(uint16_t addr, uint8_t *value);
+int bq76972_read_data_memory_u16(uint16_t addr, uint16_t *value);
+
+// ============================================================================
+// 16-bit Value Functions (LSB/MSB Read)
+// ============================================================================
+int bq76972_read_u16(uint8_t lsb_command, uint16_t *value);
+
+// ============================================================================
+// Voltage Reading Functions
+// ============================================================================
+int bq76972_read_cell_voltage(cell_voltage_t cell, uint16_t *voltage_mv);
+int bq76972_read_all_cell_voltages(uint16_t *voltages, size_t num_cells);
+
+// ============================================================================
+// Temperature Reading Functions
+// NOTE: the device reports temperature direct commands in 0.1 K units.
+// ============================================================================
+int bq76972_read_temperature(thermistor_t sensor, int16_t *temperature_dK);
+int bq76972_read_all_temperatures(const thermistor_t *sensors,
+                                  int16_t *temperatures_dK,
+                                  size_t num_sensors);
+float bq76972_temperature_dK_to_c(int16_t temperature_dK);
+
+// ============================================================================
+// Thermistor Pin Configuration
+// These configure TS1 / TS2 / TS3 / DFETOFF / DCHG / DDSG as thermistor inputs.
+// ============================================================================
+int bq76972_configure_thermistors(uint8_t ts1_config,
+                                  uint8_t ts2_config,
+                                  uint8_t ts3_config,
+                                  uint8_t dfetoff_config,
+                                  uint8_t dchg_config,
+                                  uint8_t ddsg_config);
+
+int bq76972_configure_thermistors_default(void);
+
+int bq76972_read_thermistor_pin_configs(uint8_t *ts1_config,
+                                        uint8_t *ts2_config,
+                                        uint8_t *ts3_config,
+                                        uint8_t *dfetoff_config,
+                                        uint8_t *dchg_config,
+                                        uint8_t *ddsg_config);
+
+int bq76972_read_all_thermistor_values(int16_t *temperatures_dK,
+                                       size_t num_temperatures);
+
+// ============================================================================
+// Current Reading Functions
+// CC2 Current (0x3A): signed 16-bit, units determined by USER_AMPS setting
+// in DA Configuration (0x9303).
+// ============================================================================
+
+// USER_AMPS setting in DA Configuration register
+typedef enum
+{
+    USER_AMPS_0_1_MA = 0, // 0.1 mA per count
+    USER_AMPS_1_MA = 1,   // 1 mA per count (default)
+    USER_AMPS_10_MA = 2,  // 10 mA per count
+    USER_AMPS_100_MA = 3, // 100 mA per count
+} user_amps_t;
+
+int bq76972_configure_user_amps(user_amps_t setting);
+int bq76972_read_user_amps(user_amps_t *setting);
+
+// Reads the raw CC2 current value. Units depend on the USER_AMPS setting.
+int bq76972_read_current_raw(int16_t *raw);
+
+// Reads CC2 current and converts to milliamps using the current USER_AMPS
+// setting. Call bq76972_configure_user_amps() first, or the default (1 mA)
+// is assumed.
+int bq76972_read_current_mA(int32_t *current_mA);
+
+// ============================================================================
+// Configuration Verification
+// ============================================================================
+int bq76972_verify_thermistor_config(void);
+
+// ============================================================================
+// Power Management
+// ============================================================================
+void bq76972_wakeup(void);
 
 #endif // FW_BQ76972_H
