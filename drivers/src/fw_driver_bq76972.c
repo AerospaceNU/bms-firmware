@@ -1,4 +1,4 @@
-#include "fw_bq76972.h"
+#include "fw_driver_bq76972.h"
 
 #include <stdio.h>
 
@@ -64,8 +64,8 @@
 
 #define DEBUG 0
 
-// Cached USER_AMPS setting — updated by bq76972_configure_user_amps()
-static user_amps_t cached_user_amps = USER_AMPS_1_MA;
+// Cached USER_AMPS setting — updated by fw_bq76972_configure_user_amps()
+static fw_user_amps_t cached_user_amps = FW_USER_AMPS_1_MA;
 
 // ============================================================================
 // Private Helper Functions
@@ -176,32 +176,32 @@ static uint8_t calculate_dm_checksum(uint16_t addr, const uint8_t *data, size_t 
 // Write two consecutive direct-command registers as two separate SPI transactions.
 // The BQ769x2 SPI interface only supports single-byte register writes per
 // transaction (unlike I2C which supports block writes).
-static int bq76972_write_direct_pair(uint8_t command_lsb,
+static int fw_bq76972_write_direct_pair(uint8_t command_lsb,
                                      uint8_t value_lsb,
                                      uint8_t command_msb,
                                      uint8_t value_msb)
 {
     if ((uint8_t)(command_lsb + 1U) != command_msb)
     {
-        return SPI_UNKNOWN_ERR;
+        return FW_BQ76972_SPI_UNKNOWN_ERR;
     }
 
     // First register write: command_lsb = value_lsb
-    int result = bq76972_write_direct(command_lsb, value_lsb);
-    if (result != SUCCESS)
+    int result = fw_bq76972_write_direct(command_lsb, value_lsb);
+    if (result != FW_BQ76972_SUCCESS)
     {
         return result;
     }
 
     // Second register write: command_msb = value_msb
-    return bq76972_write_direct(command_msb, value_msb);
+    return fw_bq76972_write_direct(command_msb, value_msb);
 }
 
 // ============================================================================
 // Public API Functions
 // ============================================================================
 
-void bq76972_init(void)
+void fw_bq76972_init(void)
 {
     spi_init(SPI_PORT, SPI_BAUDRATE);
     spi_set_format(SPI_PORT, BITS_PER_TRANSFER, SPI_CPOL, SPI_CPHA, SPI_ORDER);
@@ -216,15 +216,15 @@ void bq76972_init(void)
     gpio_put(PIN_CS, 1);
 }
 
-int bq76972_read_direct(uint8_t command, uint8_t *data)
+int fw_bq76972_read_direct(uint8_t command, uint8_t *data)
 {
     if (data == NULL)
     {
-        return SPI_UNKNOWN_ERR;
+        return FW_BQ76972_SPI_UNKNOWN_ERR;
     }
 
     size_t tries = 0;
-    int err_code = SPI_UNKNOWN_ERR;
+    int err_code = FW_BQ76972_SPI_UNKNOWN_ERR;
     uint8_t tx_buf[3] = {command, 0x00, 0x00};
     uint8_t rx_buf[3] = {0};
 
@@ -237,7 +237,7 @@ int bq76972_read_direct(uint8_t command, uint8_t *data)
 
         if (!spi_read(rx_buf, 3))
         {
-            err_code = SPI_CRC_MISMATCH_ERR;
+            err_code = FW_BQ76972_SPI_CRC_MISMATCH_ERR;
             tries++;
             sleep_us(SPI_RETRY_BACKOFF_US);
             continue;
@@ -245,7 +245,7 @@ int bq76972_read_direct(uint8_t command, uint8_t *data)
 
         if (is_outgoing_buffer_not_updated(rx_buf))
         {
-            err_code = SPI_READ_TOO_FAST_ERR;
+            err_code = FW_BQ76972_SPI_READ_TOO_FAST_ERR;
             tries++;
             sleep_us(SPI_RETRY_BACKOFF_US);
             continue;
@@ -253,29 +253,29 @@ int bq76972_read_direct(uint8_t command, uint8_t *data)
 
         if (is_internal_osc_asleep(rx_buf))
         {
-            err_code = SPI_INTERNAL_OSC_ASLEEP_ERR;
+            err_code = FW_BQ76972_SPI_INTERNAL_OSC_ASLEEP_ERR;
             tries++;
-            bq76972_wakeup();
+            fw_bq76972_wakeup();
             sleep_ms(WAKEUP_DELAY_MS);
             continue;
         }
 
         if (rx_buf[0] != command)
         {
-            err_code = SPI_UNEXPECTED_RESPONSE_ERR;
+            err_code = FW_BQ76972_SPI_UNEXPECTED_RESPONSE_ERR;
             tries++;
             sleep_us(SPI_RETRY_BACKOFF_US);
             continue;
         }
 
         *data = rx_buf[1];
-        return SUCCESS;
+        return FW_BQ76972_SUCCESS;
     }
 
     return err_code;
 }
 
-int bq76972_write_direct(uint8_t command, uint8_t data)
+int fw_bq76972_write_direct(uint8_t command, uint8_t data)
 {
     // BQ769x2 SPI protocol: bit 7 of the first byte indicates R/W.
     // Bit 7 = 0 for read, bit 7 = 1 for write.
@@ -283,72 +283,72 @@ int bq76972_write_direct(uint8_t command, uint8_t data)
     tx_buf[2] = calculate_crc(tx_buf, 2);
     spi_write(tx_buf, 3);
     sleep_us(SPI_TRANSACTION_DELAY_US);
-    return SUCCESS;
+    return FW_BQ76972_SUCCESS;
 }
 
-int bq76972_send_subcommand(uint16_t subcommand)
+int fw_bq76972_send_subcommand(uint16_t subcommand)
 {
-    return bq76972_write_direct_pair(SUBCOMMAND_LOWER,
+    return fw_bq76972_write_direct_pair(SUBCOMMAND_LOWER,
                                      (uint8_t)(subcommand & 0xFFU),
                                      SUBCOMMAND_UPPER,
                                      (uint8_t)((subcommand >> 8) & 0xFFU));
 }
 
-int bq76972_enter_config_update(void)
+int fw_bq76972_enter_config_update(void)
 {
-    int result = bq76972_send_subcommand(0x0090);
-    if (result == SUCCESS)
+    int result = fw_bq76972_send_subcommand(0x0090);
+    if (result == FW_BQ76972_SUCCESS)
     {
         sleep_ms(2);
     }
     return result;
 }
 
-int bq76972_exit_config_update(void)
+int fw_bq76972_exit_config_update(void)
 {
-    int result = bq76972_send_subcommand(0x0092);
-    if (result == SUCCESS)
+    int result = fw_bq76972_send_subcommand(0x0092);
+    if (result == FW_BQ76972_SUCCESS)
     {
         sleep_ms(100);
     }
     return result;
 }
 
-int bq76972_write_data_memory(uint16_t addr, const uint8_t *data, size_t len,
+int fw_bq76972_write_data_memory(uint16_t addr, const uint8_t *data, size_t len,
                               bool use_config_update)
 {
     if (data == NULL || len == 0 || len > DATA_MEMORY_MAX_BYTES)
     {
-        return SPI_UNKNOWN_ERR;
+        return FW_BQ76972_SPI_UNKNOWN_ERR;
     }
 
-    int result = SUCCESS;
+    int result = FW_BQ76972_SUCCESS;
 
     if (use_config_update)
     {
-        result = bq76972_enter_config_update();
-        if (result != SUCCESS)
+        result = fw_bq76972_enter_config_update();
+        if (result != FW_BQ76972_SUCCESS)
         {
             return result;
         }
     }
 
-    result = bq76972_write_direct_pair(SUBCOMMAND_LOWER,
+    result = fw_bq76972_write_direct_pair(SUBCOMMAND_LOWER,
                                        (uint8_t)(addr & 0xFFU),
                                        SUBCOMMAND_UPPER,
                                        (uint8_t)((addr >> 8) & 0xFFU));
 
-    for (size_t i = 0; i < len && result == SUCCESS; i++)
+    for (size_t i = 0; i < len && result == FW_BQ76972_SUCCESS; i++)
     {
-        result = bq76972_write_direct((uint8_t)(RESPONSE_BUFFER_START + i), data[i]);
+        result = fw_bq76972_write_direct((uint8_t)(RESPONSE_BUFFER_START + i), data[i]);
     }
 
-    if (result == SUCCESS)
+    if (result == FW_BQ76972_SUCCESS)
     {
         uint8_t checksum = calculate_dm_checksum(addr, data, len);
         uint8_t total_length = (uint8_t)(len + 4U);
 
-        result = bq76972_write_direct_pair(RESPONSE_BUFFER_CHKSUM,
+        result = fw_bq76972_write_direct_pair(RESPONSE_BUFFER_CHKSUM,
                                            checksum,
                                            RESPONSE_BUFFER_LENGTH,
                                            total_length);
@@ -356,14 +356,14 @@ int bq76972_write_data_memory(uint16_t addr, const uint8_t *data, size_t len,
 
     if (use_config_update)
     {
-        int exit_result = bq76972_exit_config_update();
-        if (result == SUCCESS)
+        int exit_result = fw_bq76972_exit_config_update();
+        if (result == FW_BQ76972_SUCCESS)
         {
             result = exit_result;
         }
     }
 
-    if (result == SUCCESS)
+    if (result == FW_BQ76972_SUCCESS)
     {
         sleep_ms(CONFIG_SETTLE_DELAY_MS);
     }
@@ -371,33 +371,33 @@ int bq76972_write_data_memory(uint16_t addr, const uint8_t *data, size_t len,
     return result;
 }
 
-int bq76972_write_data_memory_u8(uint16_t addr, uint8_t value, bool use_config_update)
+int fw_bq76972_write_data_memory_u8(uint16_t addr, uint8_t value, bool use_config_update)
 {
-    return bq76972_write_data_memory(addr, &value, 1, use_config_update);
+    return fw_bq76972_write_data_memory(addr, &value, 1, use_config_update);
 }
 
-int bq76972_write_data_memory_u16(uint16_t addr, uint16_t value, bool use_config_update)
+int fw_bq76972_write_data_memory_u16(uint16_t addr, uint16_t value, bool use_config_update)
 {
     uint8_t bytes[2] = {
         (uint8_t)(value & 0xFFU),
         (uint8_t)((value >> 8) & 0xFFU),
     };
 
-    return bq76972_write_data_memory(addr, bytes, 2, use_config_update);
+    return fw_bq76972_write_data_memory(addr, bytes, 2, use_config_update);
 }
 
-int bq76972_read_data_memory(uint16_t addr, uint8_t *data, size_t len)
+int fw_bq76972_read_data_memory(uint16_t addr, uint8_t *data, size_t len)
 {
     if (data == NULL || len == 0 || len > DATA_MEMORY_MAX_BYTES)
     {
-        return SPI_UNKNOWN_ERR;
+        return FW_BQ76972_SPI_UNKNOWN_ERR;
     }
 
-    int result = bq76972_write_direct_pair(SUBCOMMAND_LOWER,
+    int result = fw_bq76972_write_direct_pair(SUBCOMMAND_LOWER,
                                            (uint8_t)(addr & 0xFFU),
                                            SUBCOMMAND_UPPER,
                                            (uint8_t)((addr >> 8) & 0xFFU));
-    if (result != SUCCESS)
+    if (result != FW_BQ76972_SUCCESS)
     {
         return result;
     }
@@ -410,12 +410,12 @@ int bq76972_read_data_memory(uint16_t addr, uint8_t *data, size_t len)
     {
         if (attempt > 0)
         {
-            bq76972_wakeup();
-            result = bq76972_write_direct_pair(SUBCOMMAND_LOWER,
+            fw_bq76972_wakeup();
+            result = fw_bq76972_write_direct_pair(SUBCOMMAND_LOWER,
                                                (uint8_t)(addr & 0xFFU),
                                                SUBCOMMAND_UPPER,
                                                (uint8_t)((addr >> 8) & 0xFFU));
-            if (result != SUCCESS)
+            if (result != FW_BQ76972_SUCCESS)
             {
                 return result;
             }
@@ -426,13 +426,13 @@ int bq76972_read_data_memory(uint16_t addr, uint8_t *data, size_t len)
             uint8_t subcmd_lo = 0xFF;
             uint8_t resp_len = 0;
 
-            result = bq76972_read_direct(SUBCOMMAND_LOWER, &subcmd_lo);
-            if (result == SUCCESS)
+            result = fw_bq76972_read_direct(SUBCOMMAND_LOWER, &subcmd_lo);
+            if (result == FW_BQ76972_SUCCESS)
             {
-                result = bq76972_read_direct(RESPONSE_BUFFER_LENGTH, &resp_len);
+                result = fw_bq76972_read_direct(RESPONSE_BUFFER_LENGTH, &resp_len);
             }
 
-            if (result == SUCCESS &&
+            if (result == FW_BQ76972_SUCCESS &&
                 subcmd_lo == (uint8_t)(addr & 0xFFU) && resp_len > 0)
             {
                 ready = true;
@@ -445,14 +445,14 @@ int bq76972_read_data_memory(uint16_t addr, uint8_t *data, size_t len)
     if (!ready)
     {
         printf("[DM_READ 0x%04X] Response buffer never ready\n", addr);
-        return SPI_READ_TOO_FAST_ERR;
+        return FW_BQ76972_SPI_READ_TOO_FAST_ERR;
     }
 
     // Read length to determine how many buffer bytes the device populated.
     // Length = subcmd(2) + chk/len(2) + buffer_data_bytes.
     uint8_t reported_length = 0;
-    result = bq76972_read_direct(RESPONSE_BUFFER_LENGTH, &reported_length);
-    if (result != SUCCESS)
+    result = fw_bq76972_read_direct(RESPONSE_BUFFER_LENGTH, &reported_length);
+    if (result != FW_BQ76972_SUCCESS)
     {
         return result;
     }
@@ -462,16 +462,16 @@ int bq76972_read_data_memory(uint16_t addr, uint8_t *data, size_t len)
     {
         printf("[DM_READ 0x%04X] Invalid response length: %d\n",
                addr, reported_length);
-        return SPI_UNEXPECTED_RESPONSE_ERR;
+        return FW_BQ76972_SPI_UNEXPECTED_RESPONSE_ERR;
     }
 
     // Read the full data block from the transfer buffer (0x40..0x5F).
     uint8_t block[DATA_MEMORY_MAX_BYTES] = {0};
     for (size_t i = 0; i < buf_data_len; i++)
     {
-        result = bq76972_read_direct(
+        result = fw_bq76972_read_direct(
             (uint8_t)(RESPONSE_BUFFER_START + i), &block[i]);
-        if (result != SUCCESS)
+        if (result != FW_BQ76972_SUCCESS)
         {
             printf("[DM_READ 0x%04X] Failed reading 0x%02X (err=%d)\n",
                    addr, (unsigned)(RESPONSE_BUFFER_START + i), result);
@@ -481,8 +481,8 @@ int bq76972_read_data_memory(uint16_t addr, uint8_t *data, size_t len)
 
     // Read the reported checksum.
     uint8_t reported_checksum = 0;
-    result = bq76972_read_direct(RESPONSE_BUFFER_CHKSUM, &reported_checksum);
-    if (result != SUCCESS)
+    result = fw_bq76972_read_direct(RESPONSE_BUFFER_CHKSUM, &reported_checksum);
+    if (result != FW_BQ76972_SUCCESS)
     {
         return result;
     }
@@ -497,7 +497,7 @@ int bq76972_read_data_memory(uint16_t addr, uint8_t *data, size_t len)
     if (reported_checksum != computed_checksum)
     {
         printf("[DM_READ 0x%04X] Checksum mismatch\n", addr);
-        return SPI_CRC_MISMATCH_ERR;
+        return FW_BQ76972_SPI_CRC_MISMATCH_ERR;
     }
 
     // The device always returns a full 32-byte block aligned to the base
@@ -507,7 +507,7 @@ int bq76972_read_data_memory(uint16_t addr, uint8_t *data, size_t len)
     {
         printf("[DM_READ 0x%04X] Requested %zu bytes but block has %zu\n",
                addr, len, buf_data_len);
-        return SPI_UNEXPECTED_RESPONSE_ERR;
+        return FW_BQ76972_SPI_UNEXPECTED_RESPONSE_ERR;
     }
 
     for (size_t i = 0; i < len; i++)
@@ -515,70 +515,70 @@ int bq76972_read_data_memory(uint16_t addr, uint8_t *data, size_t len)
         data[i] = block[i];
     }
 
-    return SUCCESS;
+    return FW_BQ76972_SUCCESS;
 }
 
-int bq76972_read_data_memory_u8(uint16_t addr, uint8_t *value)
+int fw_bq76972_read_data_memory_u8(uint16_t addr, uint8_t *value)
 {
-    return bq76972_read_data_memory(addr, value, 1);
+    return fw_bq76972_read_data_memory(addr, value, 1);
 }
 
-int bq76972_read_data_memory_u16(uint16_t addr, uint16_t *value)
+int fw_bq76972_read_data_memory_u16(uint16_t addr, uint16_t *value)
 {
     if (value == NULL)
     {
-        return SPI_UNKNOWN_ERR;
+        return FW_BQ76972_SPI_UNKNOWN_ERR;
     }
 
     uint8_t bytes[2] = {0};
-    int result = bq76972_read_data_memory(addr, bytes, 2);
-    if (result == SUCCESS)
+    int result = fw_bq76972_read_data_memory(addr, bytes, 2);
+    if (result == FW_BQ76972_SUCCESS)
     {
         *value = (uint16_t)bytes[0] | ((uint16_t)bytes[1] << 8);
     }
     return result;
 }
 
-int bq76972_read_u16(uint8_t lsb_command, uint16_t *value)
+int fw_bq76972_read_u16(uint8_t lsb_command, uint16_t *value)
 {
     if (value == NULL)
     {
-        return SPI_UNKNOWN_ERR;
+        return FW_BQ76972_SPI_UNKNOWN_ERR;
     }
 
     uint8_t lsb = 0;
     uint8_t msb = 0;
-    int last_error = SPI_UNKNOWN_ERR;
+    int last_error = FW_BQ76972_SPI_UNKNOWN_ERR;
 
     for (int i = 0; i < SPI_MAX_RETRIES; i++)
     {
-        int result = bq76972_read_direct(lsb_command, &lsb);
-        if (result != SUCCESS)
+        int result = fw_bq76972_read_direct(lsb_command, &lsb);
+        if (result != FW_BQ76972_SUCCESS)
         {
             last_error = result;
             continue;
         }
 
-        result = bq76972_read_direct((uint8_t)(lsb_command + 1U), &msb);
-        if (result != SUCCESS)
+        result = fw_bq76972_read_direct((uint8_t)(lsb_command + 1U), &msb);
+        if (result != FW_BQ76972_SUCCESS)
         {
             last_error = result;
             continue;
         }
 
         *value = (uint16_t)lsb | ((uint16_t)msb << 8);
-        return SUCCESS;
+        return FW_BQ76972_SUCCESS;
     }
 
     return last_error;
 }
 
-int bq76972_read_cell_voltage(cell_voltage_t cell, uint16_t *voltage_mv)
+int fw_bq76972_read_cell_voltage(fw_cell_voltage_t cell, uint16_t *voltage_mv)
 {
-    return bq76972_read_u16((uint8_t)cell, voltage_mv);
+    return fw_bq76972_read_u16((uint8_t)cell, voltage_mv);
 }
 
-int bq76972_read_all_cell_voltages(uint16_t *voltages, size_t num_cells)
+int fw_bq76972_read_all_cell_voltages(uint16_t *voltages, size_t num_cells)
 {
     if (voltages == NULL || num_cells == 0)
     {
@@ -587,8 +587,8 @@ int bq76972_read_all_cell_voltages(uint16_t *voltages, size_t num_cells)
 
     for (size_t i = 0; i < num_cells; i++)
     {
-        cell_voltage_t cell = (cell_voltage_t)(CELL_1 + (i * 2));
-        if (bq76972_read_cell_voltage(cell, &voltages[i]) != SUCCESS)
+        fw_cell_voltage_t cell = (fw_cell_voltage_t)(FW_CELL_1 + (i * 2));
+        if (fw_bq76972_read_cell_voltage(cell, &voltages[i]) != FW_BQ76972_SUCCESS)
         {
             return 0;
         }
@@ -597,16 +597,16 @@ int bq76972_read_all_cell_voltages(uint16_t *voltages, size_t num_cells)
     return 1;
 }
 
-int bq76972_read_temperature(thermistor_t sensor, int16_t *temperature_dK)
+int fw_bq76972_read_temperature(fw_thermistor_t sensor, int16_t *temperature_dK)
 {
     if (temperature_dK == NULL)
     {
-        return SPI_UNKNOWN_ERR;
+        return FW_BQ76972_SPI_UNKNOWN_ERR;
     }
 
     uint16_t raw_value = 0;
-    int result = bq76972_read_u16((uint8_t)sensor, &raw_value);
-    if (result == SUCCESS)
+    int result = fw_bq76972_read_u16((uint8_t)sensor, &raw_value);
+    if (result == FW_BQ76972_SUCCESS)
     {
         *temperature_dK = (int16_t)raw_value;
     }
@@ -614,76 +614,76 @@ int bq76972_read_temperature(thermistor_t sensor, int16_t *temperature_dK)
     return result;
 }
 
-int bq76972_read_all_temperatures(const thermistor_t *sensors,
+int fw_bq76972_read_all_temperatures(const fw_thermistor_t *sensors,
                                   int16_t *temperatures_dK,
                                   size_t num_sensors)
 {
     if (sensors == NULL || temperatures_dK == NULL || num_sensors == 0)
     {
-        return SPI_UNKNOWN_ERR;
+        return FW_BQ76972_SPI_UNKNOWN_ERR;
     }
 
     for (size_t i = 0; i < num_sensors; i++)
     {
-        int result = bq76972_read_temperature(sensors[i], &temperatures_dK[i]);
-        if (result != SUCCESS)
+        int result = fw_bq76972_read_temperature(sensors[i], &temperatures_dK[i]);
+        if (result != FW_BQ76972_SUCCESS)
         {
             return result;
         }
     }
 
-    return SUCCESS;
+    return FW_BQ76972_SUCCESS;
 }
 
-float bq76972_temperature_dK_to_c(int16_t temperature_dK)
+float fw_bq76972_temperature_dK_to_c(int16_t temperature_dK)
 {
     return ((float)temperature_dK / 10.0f) - 273.15f;
 }
 
-int bq76972_configure_thermistors(uint8_t ts1_config,
+int fw_bq76972_configure_thermistors(uint8_t ts1_config,
                                   uint8_t ts2_config,
                                   uint8_t ts3_config,
                                   uint8_t dfetoff_config,
                                   uint8_t dchg_config,
                                   uint8_t ddsg_config)
 {
-    int result = bq76972_enter_config_update();
-    if (result != SUCCESS)
+    int result = fw_bq76972_enter_config_update();
+    if (result != FW_BQ76972_SUCCESS)
     {
         return result;
     }
 
-    result = bq76972_write_data_memory_u8(DFETOFF_CONFIG_ADDR, dfetoff_config, false);
-    if (result == SUCCESS)
+    result = fw_bq76972_write_data_memory_u8(DFETOFF_CONFIG_ADDR, dfetoff_config, false);
+    if (result == FW_BQ76972_SUCCESS)
     {
-        result = bq76972_write_data_memory_u8(TS1_CONFIG_ADDR, ts1_config, false);
+        result = fw_bq76972_write_data_memory_u8(TS1_CONFIG_ADDR, ts1_config, false);
     }
-    if (result == SUCCESS)
+    if (result == FW_BQ76972_SUCCESS)
     {
-        result = bq76972_write_data_memory_u8(TS2_CONFIG_ADDR, ts2_config, false);
+        result = fw_bq76972_write_data_memory_u8(TS2_CONFIG_ADDR, ts2_config, false);
     }
-    if (result == SUCCESS)
+    if (result == FW_BQ76972_SUCCESS)
     {
-        result = bq76972_write_data_memory_u8(TS3_CONFIG_ADDR, ts3_config, false);
+        result = fw_bq76972_write_data_memory_u8(TS3_CONFIG_ADDR, ts3_config, false);
     }
-    if (result == SUCCESS)
+    if (result == FW_BQ76972_SUCCESS)
     {
-        result = bq76972_write_data_memory_u8(DCHG_CONFIG_ADDR, dchg_config, false);
+        result = fw_bq76972_write_data_memory_u8(DCHG_CONFIG_ADDR, dchg_config, false);
     }
-    if (result == SUCCESS)
+    if (result == FW_BQ76972_SUCCESS)
     {
-        result = bq76972_write_data_memory_u8(DDSG_CONFIG_ADDR, ddsg_config, false);
+        result = fw_bq76972_write_data_memory_u8(DDSG_CONFIG_ADDR, ddsg_config, false);
     }
 
     {
-        int exit_result = bq76972_exit_config_update();
-        if (result == SUCCESS)
+        int exit_result = fw_bq76972_exit_config_update();
+        if (result == FW_BQ76972_SUCCESS)
         {
             result = exit_result;
         }
     }
 
-    if (result == SUCCESS)
+    if (result == FW_BQ76972_SUCCESS)
     {
         sleep_ms(CONFIG_SETTLE_DELAY_MS);
     }
@@ -691,9 +691,9 @@ int bq76972_configure_thermistors(uint8_t ts1_config,
     return result;
 }
 
-int bq76972_configure_thermistors_default(void)
+int fw_bq76972_configure_thermistors_default(void)
 {
-    return bq76972_configure_thermistors(THERMISTOR_TS_DEFAULT_CONFIG,
+    return fw_bq76972_configure_thermistors(THERMISTOR_TS_DEFAULT_CONFIG,
                                          THERMISTOR_TS_DEFAULT_CONFIG,
                                          THERMISTOR_TS_DEFAULT_CONFIG,
                                          THERMISTOR_MF_DEFAULT_CONFIG,
@@ -701,7 +701,7 @@ int bq76972_configure_thermistors_default(void)
                                          THERMISTOR_MF_DEFAULT_CONFIG);
 }
 
-int bq76972_read_thermistor_pin_configs(uint8_t *ts1_config,
+int fw_bq76972_read_thermistor_pin_configs(uint8_t *ts1_config,
                                         uint8_t *ts2_config,
                                         uint8_t *ts3_config,
                                         uint8_t *dfetoff_config,
@@ -711,41 +711,41 @@ int bq76972_read_thermistor_pin_configs(uint8_t *ts1_config,
     if (ts1_config == NULL || ts2_config == NULL || ts3_config == NULL ||
         dfetoff_config == NULL || dchg_config == NULL || ddsg_config == NULL)
     {
-        return SPI_UNKNOWN_ERR;
+        return FW_BQ76972_SPI_UNKNOWN_ERR;
     }
 
-    int result = bq76972_read_data_memory_u8(DFETOFF_CONFIG_ADDR, dfetoff_config);
-    if (result == SUCCESS)
+    int result = fw_bq76972_read_data_memory_u8(DFETOFF_CONFIG_ADDR, dfetoff_config);
+    if (result == FW_BQ76972_SUCCESS)
     {
-        result = bq76972_read_data_memory_u8(TS1_CONFIG_ADDR, ts1_config);
+        result = fw_bq76972_read_data_memory_u8(TS1_CONFIG_ADDR, ts1_config);
     }
-    if (result == SUCCESS)
+    if (result == FW_BQ76972_SUCCESS)
     {
-        result = bq76972_read_data_memory_u8(TS2_CONFIG_ADDR, ts2_config);
+        result = fw_bq76972_read_data_memory_u8(TS2_CONFIG_ADDR, ts2_config);
     }
-    if (result == SUCCESS)
+    if (result == FW_BQ76972_SUCCESS)
     {
-        result = bq76972_read_data_memory_u8(TS3_CONFIG_ADDR, ts3_config);
+        result = fw_bq76972_read_data_memory_u8(TS3_CONFIG_ADDR, ts3_config);
     }
-    if (result == SUCCESS)
+    if (result == FW_BQ76972_SUCCESS)
     {
-        result = bq76972_read_data_memory_u8(DCHG_CONFIG_ADDR, dchg_config);
+        result = fw_bq76972_read_data_memory_u8(DCHG_CONFIG_ADDR, dchg_config);
     }
-    if (result == SUCCESS)
+    if (result == FW_BQ76972_SUCCESS)
     {
-        result = bq76972_read_data_memory_u8(DDSG_CONFIG_ADDR, ddsg_config);
+        result = fw_bq76972_read_data_memory_u8(DDSG_CONFIG_ADDR, ddsg_config);
     }
 
     return result;
 }
 
-int bq76972_verify_thermistor_config(void)
+int fw_bq76972_verify_thermistor_config(void)
 {
     uint8_t ts1, ts2, ts3, dfetoff, dchg, ddsg;
 
-    int result = bq76972_read_thermistor_pin_configs(&ts1, &ts2, &ts3,
+    int result = fw_bq76972_read_thermistor_pin_configs(&ts1, &ts2, &ts3,
                                                      &dfetoff, &dchg, &ddsg);
-    if (result != SUCCESS)
+    if (result != FW_BQ76972_SUCCESS)
     {
         printf("[BQ76972] Failed to read thermistor configs (err=%d)\n", result);
         return result;
@@ -792,14 +792,14 @@ int bq76972_verify_thermistor_config(void)
         printf("[BQ76972] One or more thermistor pins failed to configure!\n");
     }
 
-    return ok ? SUCCESS : SPI_UNEXPECTED_RESPONSE_ERR;
+    return ok ? FW_BQ76972_SUCCESS : FW_BQ76972_SPI_UNEXPECTED_RESPONSE_ERR;
 }
 
-int bq76972_configure_user_amps(user_amps_t setting)
+int fw_bq76972_configure_user_amps(fw_user_amps_t setting)
 {
     uint8_t da_config = 0;
-    int result = bq76972_read_data_memory_u8(DA_CONFIG_ADDR, &da_config);
-    if (result != SUCCESS)
+    int result = fw_bq76972_read_data_memory_u8(DA_CONFIG_ADDR, &da_config);
+    if (result != FW_BQ76972_SUCCESS)
     {
         return result;
     }
@@ -807,93 +807,93 @@ int bq76972_configure_user_amps(user_amps_t setting)
     // USER_AMPS occupies bits [1:0]
     da_config = (uint8_t)((da_config & 0xFC) | ((uint8_t)setting & 0x03));
 
-    result = bq76972_write_data_memory_u8(DA_CONFIG_ADDR, da_config, true);
-    if (result == SUCCESS)
+    result = fw_bq76972_write_data_memory_u8(DA_CONFIG_ADDR, da_config, true);
+    if (result == FW_BQ76972_SUCCESS)
     {
         cached_user_amps = setting;
     }
     return result;
 }
 
-int bq76972_read_user_amps(user_amps_t *setting)
+int fw_bq76972_read_user_amps(fw_user_amps_t *setting)
 {
     if (setting == NULL)
     {
-        return SPI_UNKNOWN_ERR;
+        return FW_BQ76972_SPI_UNKNOWN_ERR;
     }
 
     uint8_t da_config = 0;
-    int result = bq76972_read_data_memory_u8(DA_CONFIG_ADDR, &da_config);
-    if (result == SUCCESS)
+    int result = fw_bq76972_read_data_memory_u8(DA_CONFIG_ADDR, &da_config);
+    if (result == FW_BQ76972_SUCCESS)
     {
-        *setting = (user_amps_t)(da_config & 0x03);
+        *setting = (fw_user_amps_t)(da_config & 0x03);
         cached_user_amps = *setting;
     }
     return result;
 }
 
-int bq76972_read_current_raw(int16_t *raw)
+int fw_bq76972_read_current_raw(int16_t *raw)
 {
     if (raw == NULL)
     {
-        return SPI_UNKNOWN_ERR;
+        return FW_BQ76972_SPI_UNKNOWN_ERR;
     }
 
     uint16_t val = 0;
-    int result = bq76972_read_u16(0x3A, &val);
-    if (result == SUCCESS)
+    int result = fw_bq76972_read_u16(0x3A, &val);
+    if (result == FW_BQ76972_SUCCESS)
     {
         *raw = (int16_t)val;
     }
     return result;
 }
 
-int bq76972_read_current_mA(int32_t *current_mA)
+int fw_bq76972_read_current_mA(int32_t *current_mA)
 {
     if (current_mA == NULL)
     {
-        return SPI_UNKNOWN_ERR;
+        return FW_BQ76972_SPI_UNKNOWN_ERR;
     }
 
     int16_t raw = 0;
-    int result = bq76972_read_current_raw(&raw);
-    if (result != SUCCESS)
+    int result = fw_bq76972_read_current_raw(&raw);
+    if (result != FW_BQ76972_SUCCESS)
     {
         return result;
     }
 
     static const float scale[] = {0.1f, 1.0f, 10.0f, 100.0f};
     *current_mA = (int32_t)((float)raw * scale[cached_user_amps & 0x03]);
-    return SUCCESS;
+    return FW_BQ76972_SUCCESS;
 }
 
-int bq76972_read_all_thermistor_values(int16_t *temperatures_dK,
+int fw_bq76972_read_all_thermistor_values(int16_t *temperatures_dK,
                                        size_t num_temperatures)
 {
-    static const thermistor_t thermistors[BQ76972_THERMISTOR_COUNT] = {
-        TS1_THERMISTOR,
-        TS2_THERMISTOR,
-        TS3_THERMISTOR,
-        DFETOFF_THERMISTOR,
-        DCHG_THERMISTOR,
-        DDSG_THERMISTOR,
+    static const fw_thermistor_t thermistors[FW_BQ76972_THERMISTOR_COUNT] = {
+        FW_TS1_THERMISTOR,
+        FW_TS2_THERMISTOR,
+        FW_TS3_THERMISTOR,
+        FW_DFETOFF_THERMISTOR,
+        FW_DCHG_THERMISTOR,
+        FW_DDSG_THERMISTOR,
     };
 
     if (temperatures_dK == NULL ||
-        num_temperatures < (size_t)BQ76972_THERMISTOR_COUNT)
+        num_temperatures < (size_t)FW_BQ76972_THERMISTOR_COUNT)
     {
-        return SPI_UNKNOWN_ERR;
+        return FW_BQ76972_SPI_UNKNOWN_ERR;
     }
 
-    bq76972_wakeup();
+    fw_bq76972_wakeup();
     sleep_ms(2);
 
-    return bq76972_read_all_temperatures(thermistors,
+    return fw_bq76972_read_all_temperatures(thermistors,
                                          temperatures_dK,
-                                         BQ76972_THERMISTOR_COUNT);
+                                         FW_BQ76972_THERMISTOR_COUNT);
 }
 
-void bq76972_wakeup(void)
+void fw_bq76972_wakeup(void)
 {
     uint8_t tx_buf[3] = {0x00, 0x00, 0x00};
     tx_buf[2] = calculate_crc(tx_buf, 2);
