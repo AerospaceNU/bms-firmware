@@ -4,5 +4,6 @@
 #include <stdint.h>
 
 int fw_driver_smbus_init(uint8_t slave_addr);
+int fw_driver_smbus_refresh(void);
 
 #endif // FW_DRIVER_SMBUS_H
