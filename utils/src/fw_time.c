@@ -11,25 +11,36 @@
 #include "pico/time.h"
 
 /// @brief Global variable to store the current time.
-void fw_time_init(fw_time_t *ptr) {
-  if (ptr == NULL) {
-    ptr = (fw_time_t *)malloc(sizeof(fw_time_t));
-  } else {
-    LOG_WARNING("g_current_time already initialized");
+void fw_time_init(fw_time_t *ptr)
+{
+  if (ptr == NULL)
+  {
+    LOG_ERROR("fw_time_init called with NULL pointer");
+    return;
   }
-  assert(ptr != NULL);
+
+  ptr->hour = 0;
+  ptr->minute = 0;
+  ptr->second = 0;
+  ptr->millisecond = 0;
+
   LOG_DEBUG("g_current_time initialized");
   return;
 }
 /// @brief Deinitialize the time module.
-void fw_time_deinit(fw_time_t *ptr) {
-  if (ptr != NULL) {
-    free(ptr);
-    ptr = NULL;
-  } else {
+void fw_time_deinit(fw_time_t *ptr)
+{
+  if (ptr == NULL)
+  {
     LOG_WARNING("g_current_time already deinitialized");
+    return;
   }
-  assert(ptr == NULL);
+
+  ptr->hour = 0;
+  ptr->minute = 0;
+  ptr->second = 0;
+  ptr->millisecond = 0;
+
   LOG_DEBUG("g_current_time deinitialized");
   return;
 }
@@ -38,7 +49,8 @@ void fw_time_deinit(fw_time_t *ptr) {
 /// @param fw_ct The current time structure.
 /// @note fw_time_init() must be called before this function.
 /// @return Current time
-fw_time_t fw_current_time(fw_time_t fw_ct) {
+fw_time_t fw_current_time(fw_time_t fw_ct)
+{
   uint64_t ms = time_us_64() / 1000;
   fw_ct.hour = ms / 3600000;
   ms %= 3600000;
@@ -50,11 +62,22 @@ fw_time_t fw_current_time(fw_time_t fw_ct) {
   return fw_ct;
 }
 
-
 /// @brief Convert a fw_time_t to a String
 /// @return String timestamp
-char* fw_time_to_string(fw_time_t time) {
-  char *fw_time_str = (char *)malloc(sizeof(char *) * TIMESTAMP_SIZE);
-  sprintf(fw_time_str, "%02ld:%02ld:%02ld:%03ld", time.hour, time.minute, time.second, time.millisecond);
+char *fw_time_to_string(fw_time_t time)
+{
+  char *fw_time_str = (char *)malloc(TIMESTAMP_SIZE);
+  if (fw_time_str == NULL)
+  {
+    return NULL;
+  }
+
+  snprintf(fw_time_str,
+           TIMESTAMP_SIZE,
+           "%02u:%02u:%02u:%03u",
+           (unsigned)time.hour,
+           (unsigned)time.minute,
+           (unsigned)time.second,
+           (unsigned)time.millisecond);
   return fw_time_str;
 }

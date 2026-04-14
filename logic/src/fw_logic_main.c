@@ -23,13 +23,15 @@ static fw_mcp4726_t g_mcp4726;
 
 int fw_logic_init()
 {
-  LOG_MESSAGE("Firmware logic init started");
-
   if (stdio_init_all() == false)
   {
-    LOG_ERROR("Could not initialize stdio");
+    // stdio backends failed to initialize; avoid fw_log here because it depends on stdio.
+    puts("[E] stdio_init_all failed");
     return E_FW_LOGIC_INIT;
   }
+
+  // Allow USB CDC to enumerate so early boot logs are visible on host.
+  LOG_MESSAGE("Firmware logic init started");
 
   if (fw_driver_smbus_init(0x0B) != 0)
   {
@@ -95,14 +97,14 @@ int main()
 {
   int err = 0;
 
-  LOG_MESSAGE("Firmware main started");
-
   err = fw_logic_init();
   if (err != 0)
   {
     LOG_ERROR("Firmware init failed in main");
     return err;
   }
+
+  LOG_MESSAGE("Firmware main started");
 
   while (1)
   {
