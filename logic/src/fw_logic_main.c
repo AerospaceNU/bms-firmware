@@ -31,6 +31,7 @@ int fw_logic_init()
   }
 
   // Allow USB CDC to enumerate so early boot logs are visible on host.
+  sleep_ms(3000);
   LOG_MESSAGE("Firmware logic init started");
 
   if (fw_driver_smbus_init(0x0B) != 0)
