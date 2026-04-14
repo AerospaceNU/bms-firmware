@@ -36,4 +36,29 @@
 #define E_BQ76972_WRITE             E_BQ76972(3)
 #define E_BQ76972_OP_STATUS         E_BQ76972(4)
 
+/*************************************************************************************************/
+/* BQ76972 Driver Return Codes */
+
+/** \brief Returned by BQ76972 driver functions on success. */
+#define FW_BQ76972_SUCCESS 1
+
+/**
+ * \brief Constructs a BQ76972 SPI fault code from the device's SPI status fault index \p x.
+ *
+ * SPI fault codes occupy the range [100, 199]. The index \p x corresponds
+ * directly to the fault reported in the device's SPI response byte.
+ */
+#define FW_BQ76972_SPI_ERR(x)                   (100 + (x))
+
+/** \brief SPI error: unrecognised fault (fault index 0). */
+#define FW_BQ76972_SPI_UNKNOWN_ERR              FW_BQ76972_SPI_ERR(0)
+/** \brief SPI error: host read issued before device finished processing (fault index 1). */
+#define FW_BQ76972_SPI_READ_TOO_FAST_ERR        FW_BQ76972_SPI_ERR(1)
+/** \brief SPI error: internal oscillator is asleep; device not ready (fault index 2). */
+#define FW_BQ76972_SPI_INTERNAL_OSC_ASLEEP_ERR  FW_BQ76972_SPI_ERR(2)
+/** \brief SPI error: CRC in response does not match computed value (fault index 3). */
+#define FW_BQ76972_SPI_CRC_MISMATCH_ERR         FW_BQ76972_SPI_ERR(3)
+/** \brief SPI error: response opcode or length was not as expected (fault index 4). */
+#define FW_BQ76972_SPI_UNEXPECTED_RESPONSE_ERR  FW_BQ76972_SPI_ERR(4)
+
 #endif // _FW_LOGIC_ERROR_
