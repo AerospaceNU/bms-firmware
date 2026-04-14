@@ -23,6 +23,8 @@ static fw_mcp4726_t g_mcp4726;
 
 int fw_logic_init()
 {
+  LOG_MESSAGE("Firmware logic init started");
+
   if (stdio_init_all() == false)
   {
     LOG_ERROR("Could not initialize stdio");
@@ -71,16 +73,21 @@ int fw_logic_init()
 
   fw_time_init(&g_current_time);
   LOG_DEBUG("g_current_time initialized");
+  LOG_MESSAGE("Firmware logic init complete");
   return 0;
 }
 
 int fw_logic_deinit()
 {
+  LOG_MESSAGE("Firmware logic deinit started");
+
   if (&g_current_time != NULL)
   {
     fw_time_deinit(&g_current_time);
     LOG_DEBUG("g_current_time deinitialized");
   }
+
+  LOG_MESSAGE("Firmware logic deinit complete");
   return 0;
 }
 
@@ -88,9 +95,12 @@ int main()
 {
   int err = 0;
 
+  LOG_MESSAGE("Firmware main started");
+
   err = fw_logic_init();
   if (err != 0)
   {
+    LOG_ERROR("Firmware init failed in main");
     return err;
   }
 

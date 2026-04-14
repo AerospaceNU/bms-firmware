@@ -2,8 +2,11 @@
 
 #include "drivers/inc/fw_driver_bq76972.h"
 
+#include <stdio.h>
+
 #include "hardware/i2c.h"
 #include "pico/stdlib.h"
+#include "utils/inc/fw_util_logging.h"
 
 #define FW_SMBUS_PORT i2c0
 #define FW_SMBUS_SDA 8
@@ -154,29 +157,37 @@ static uint8_t fw_driver_smbus_get_register_byte(uint8_t reg, uint8_t byte_idx)
 
 int fw_driver_smbus_refresh(void)
 {
+    char msg[128] = {0};
     uint16_t cells[FW_SMBUS_BATTERY_CELL_COUNT] = {0};
     uint16_t pack_voltage_mv = 0;
     int32_t current_ma = 0;
     int16_t temperature_dK = 0;
 
+    LOG_DEBUG("SMBus refresh started");
+
     if (fw_bq76972_read_all_cell_voltages(cells, FW_SMBUS_BATTERY_CELL_COUNT) != 1)
     {
+        LOG_ERROR("SMBus refresh failed: read_all_cell_voltages");
         return -1;
     }
 
     if (fw_bq76972_read_cell_voltage(FW_STACK_VOLTAGE, &pack_voltage_mv) != FW_BQ76972_SUCCESS)
     {
         pack_voltage_mv = fw_driver_smbus_sum_cells(cells, FW_SMBUS_BATTERY_CELL_COUNT);
+        snprintf(msg, sizeof(msg), "SMBus refresh fallback: summed pack voltage = %u mV", (unsigned)pack_voltage_mv);
+        LOG_WARNING(msg);
     }
 
     if (fw_bq76972_read_current_mA(&current_ma) != FW_BQ76972_SUCCESS)
     {
         current_ma = 0;
+        LOG_WARNING("SMBus refresh fallback: current = 0 mA");
     }
 
     if (fw_bq76972_read_temperature(FW_INT_THERMISTOR, &temperature_dK) != FW_BQ76972_SUCCESS)
     {
         temperature_dK = 0;
+        LOG_WARNING("SMBus refresh fallback: temperature = 0 dK");
     }
 
     g_snapshot.pack_voltage_mv = pack_voltage_mv;
@@ -194,11 +205,21 @@ int fw_driver_smbus_refresh(void)
 
     g_snapshot.valid = true;
 
+    snprintf(msg,
+             sizeof(msg),
+             "SMBus refresh complete: V=%u mV I=%ld mA T=%u dK SoC=%u%%",
+             (unsigned)g_snapshot.pack_voltage_mv,
+             (long)g_snapshot.current_ma,
+             (unsigned)g_snapshot.temperature_dK,
+             (unsigned)g_snapshot.state_of_charge);
+    LOG_DEBUG(msg);
+
     return 0;
 }
 
 static void fw_driver_smbus_irq_handler(void)
 {
+    char msg[96] = {0};
     i2c_hw_t *i2c_hw = i2c_get_hw(FW_SMBUS_PORT);
     uint32_t status = i2c_hw->intr_stat;
 
@@ -206,18 +227,34 @@ static void fw_driver_smbus_irq_handler(void)
     {
         g_current_register = (uint8_t)i2c_hw->data_cmd;
         g_byte_index = 0;
+
+        snprintf(msg, sizeof(msg), "SMBus RX register select: 0x%02X", g_current_register);
+        LOG_DEBUG(msg);
     }
 
     if ((status & I2C_IC_INTR_STAT_R_RD_REQ_BITS) != 0u)
     {
-        i2c_hw->data_cmd = fw_driver_smbus_get_register_byte(g_current_register, g_byte_index);
+        uint8_t tx_byte = fw_driver_smbus_get_register_byte(g_current_register, g_byte_index);
+        i2c_hw->data_cmd = tx_byte;
         (void)i2c_hw->clr_rd_req;
+
+        snprintf(msg,
+                 sizeof(msg),
+                 "SMBus TX reg=0x%02X byte=%u value=0x%02X",
+                 g_current_register,
+                 (unsigned)g_byte_index,
+                 tx_byte);
+        LOG_DEBUG(msg);
+
         g_byte_index++;
     }
 }
 
 int fw_driver_smbus_init(uint8_t slave_addr)
 {
+    char msg[80] = {0};
+    LOG_MESSAGE("Initializing SMBus slave");
+
     i2c_init(FW_SMBUS_PORT, 100 * 1000);
 
     gpio_set_function(FW_SMBUS_SDA, GPIO_FUNC_I2C);
@@ -235,6 +272,9 @@ int fw_driver_smbus_init(uint8_t slave_addr)
         I2C_IC_INTR_MASK_M_RX_FULL_BITS;
 
     g_snapshot.valid = false;
+
+    snprintf(msg, sizeof(msg), "SMBus slave initialized at address 0x%02X", slave_addr);
+    LOG_MESSAGE(msg);
 
     return 0;
 }
